@@ -153,20 +153,19 @@ export default function UserDashboard() {
   return (
     <div className="min-h-screen bg-dark-bg text-dark-text font-sans">
       {/* Header */}
-      <header className="bg-dark-card border-b border-white/5 px-8 py-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-dark-card/80">
-        <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
+      <header className="bg-dark-card border-b border-white/5 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-dark-card/80">
+        <h1 className="text-lg sm:text-xl lg:text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
           User Dashboard
         </h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
             onClick={() => navigate('/profile')}
-            className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-white/5 transition-colors"
-          >
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
+            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
               {currentUserData?.photoURL ? (
                 <img src={currentUserData.photoURL} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-white font-medium text-sm">{currentUserData?.name?.charAt(0) || 'U'}</span>
+                <span className="text-white font-medium text-xs sm:text-sm">{currentUserData?.name?.charAt(0) || 'U'}</span>
               )}
             </div>
             <div className="text-left hidden md:block">
@@ -176,7 +175,7 @@ export default function UserDashboard() {
           </button>
           <button
             onClick={() => navigate('/login')}
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/5"
+            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors px-2 sm:px-4 py-2 rounded-lg hover:bg-white/5"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />
             <span className="hidden md:inline">Logout</span>
@@ -184,48 +183,48 @@ export default function UserDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8 animate-fade-in">
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in">
 
         {/* Leave Balance Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-primary-600 to-primary-700 border border-primary-500/20 rounded-2xl shadow-xl p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+          <div className="bg-gradient-to-br from-primary-600 to-primary-700 border border-primary-500/20 rounded-2xl shadow-xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-primary-100 text-sm font-medium">Total Leave Days</span>
-              <CalendarDaysIcon className="h-5 w-5 text-primary-200" />
+              <span className="text-primary-100 text-xs sm:text-sm font-medium">Total Leave Days</span>
+              <CalendarDaysIcon className="h-4 w-4 sm:h-5 sm:w-5 text-primary-200" />
             </div>
-            <div className="text-3xl font-bold text-white">{getLeaveBalance().total}</div>
+            <div className="text-2xl sm:text-3xl font-bold text-white">{getLeaveBalance().total}</div>
             <p className="text-xs text-primary-200 mt-1">Allocated this year</p>
           </div>
 
-          <div className="bg-gradient-to-br from-amber-600 to-amber-700 border border-amber-500/20 rounded-2xl shadow-xl p-6">
+          <div className="bg-gradient-to-br from-amber-600 to-amber-700 border border-amber-500/20 rounded-2xl shadow-xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-amber-100 text-sm font-medium">Used Days</span>
-              <ClockIcon className="h-5 w-5 text-amber-200" />
+              <span className="text-amber-100 text-xs sm:text-sm font-medium">Used Days</span>
+              <ClockIcon className="h-4 w-4 sm:h-5 sm:w-5 text-amber-200" />
             </div>
-            <div className="text-3xl font-bold text-white">{getLeaveBalance().used}</div>
+            <div className="text-2xl sm:text-3xl font-bold text-white">{getLeaveBalance().used}</div>
             <p className="text-xs text-amber-200 mt-1">Deductable leaves taken</p>
           </div>
 
-          <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 border border-emerald-500/20 rounded-2xl shadow-xl p-6">
+          <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 border border-emerald-500/20 rounded-2xl shadow-xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-emerald-100 text-sm font-medium">Remaining Days</span>
-              <CalendarDaysIcon className="h-5 w-5 text-emerald-200" />
+              <span className="text-emerald-100 text-xs sm:text-sm font-medium">Remaining Days</span>
+              <CalendarDaysIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-200" />
             </div>
-            <div className="text-3xl font-bold text-white">{getLeaveBalance().remaining}</div>
+            <div className="text-2xl sm:text-3xl font-bold text-white">{getLeaveBalance().remaining}</div>
             <p className="text-xs text-emerald-200 mt-1">Available to use</p>
           </div>
         </div>
 
         {/* Leave Booking Card */}
-        <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl p-6">
-          <div className="flex items-center gap-3 mb-6">
+        <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl p-4 sm:p-6">
+          <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <div className="p-2 bg-primary-500/10 rounded-lg">
-              <PlusCircleIcon className="h-6 w-6 text-primary-400" />
+              <PlusCircleIcon className="h-5 w-5 sm:h-6 sm:w-6 text-primary-400" />
             </div>
-            <h2 className="text-xl font-heading font-semibold">Request Leave</h2>
+            <h2 className="text-lg sm:text-xl font-heading font-semibold">Request Leave</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
             <div className="space-y-1">
               <label className="text-xs text-slate-400 ml-1">From</label>
               <input
@@ -260,7 +259,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          <div className="flex gap-4 items-end">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end">
             <input
               className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
               placeholder="Reason for leave..."
@@ -277,7 +276,7 @@ export default function UserDashboard() {
               <span className="text-sm text-slate-300">Half Day</span>
             </label>
             <button
-              className="bg-primary-600 hover:bg-primary-500 text-white px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20"
+              className="bg-primary-600 hover:bg-primary-500 text-white px-6 sm:px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20 w-full sm:w-auto"
               onClick={bookLeave}
             >
               Submit Request
@@ -287,13 +286,13 @@ export default function UserDashboard() {
 
         {/* Weekly Calendar - Grid Layout */}
         <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-          <div className="p-6 border-b border-white/5 flex justify-between items-center">
+          <div className="p-4 sm:p-6 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-secondary-500/10 rounded-lg">
-                <CalendarDaysIcon className="h-6 w-6 text-secondary-400" />
+                <CalendarDaysIcon className="h-5 w-5 sm:h-6 sm:w-6 text-secondary-400" />
               </div>
               <div>
-                <h2 className="text-xl font-heading font-semibold">Team Leave Calendar</h2>
+                <h2 className="text-lg sm:text-xl font-heading font-semibold">Team Leave Calendar</h2>
                 <p className="text-xs text-slate-400 mt-1">
                   Week of {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
@@ -318,13 +317,13 @@ export default function UserDashboard() {
           </div>
 
           {/* Category Legend */}
-          <div className="px-6 py-4 border-b border-white/5 bg-dark-bg/30">
-            <div className="flex flex-wrap gap-3">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/5 bg-dark-bg/30">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               <span className="text-xs text-slate-400 font-medium mr-2">Leave Types:</span>
               {Object.entries(LEAVE_CATEGORIES).map(([category, info]) => (
-                <div key={category} className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${info.color}`}></div>
-                  <span className="text-xs text-slate-300">{category}</span>
+                <div key={category} className="flex items-center gap-1.5 sm:gap-2">
+                  <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${info.color}`}></div>
+                  <span className="text-[10px] sm:text-xs text-slate-300">{category}</span>
                 </div>
               ))}
             </div>
@@ -401,8 +400,8 @@ export default function UserDashboard() {
                                       <div className="text-[9px] text-white/70">Half Day</div>
                                     )}
                                     <div className={`text-[9px] mt-1 px-1 py-0.5 rounded ${leave.status === 'Approved' ? 'bg-green-500/30 text-green-200' :
-                                        leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
-                                          'bg-yellow-500/30 text-yellow-200'
+                                      leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
+                                        'bg-yellow-500/30 text-yellow-200'
                                       }`}>
                                       {leave.status}
                                     </div>

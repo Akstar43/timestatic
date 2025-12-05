@@ -1,8 +1,7 @@
 // src/pages/Admin.jsx
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { auth, db, ts, secondaryAuth } from "../firebase/firebase";
-import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth, db, ts } from "../firebase/firebase";
 import toast, { Toaster } from "react-hot-toast";
 import {
   UsersIcon,
@@ -13,13 +12,16 @@ import {
   TrashIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  Bars3Icon,
+  XMarkIcon
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 
 export default function Admin() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("usersOrgs");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Users & Orgs
   const [users, setUsers] = useState([]);
@@ -29,7 +31,6 @@ export default function Admin() {
 
   // Create User
   const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserName, setNewUserName] = useState("");
   const [newUserRole, setNewUserRole] = useState("user");
 
@@ -127,7 +128,7 @@ export default function Admin() {
 
   // ----- User Management -----
   async function createUser() {
-    if (!newUserEmail || !newUserPassword || !newUserName) {
+    if (!newUserEmail || !newUserName) {
       return toast.error("Please fill all fields");
     }
 
@@ -137,28 +138,22 @@ export default function Admin() {
       return toast.error("Please enter a valid email address");
     }
 
-    // Validate password length (Firebase requires minimum 6 characters)
-    if (newUserPassword.length < 6) {
-      return toast.error("Password must be at least 6 characters long");
-    }
-
     // Validate name
     if (newUserName.trim().length < 2) {
       return toast.error("Name must be at least 2 characters long");
     }
 
     try {
-      // Create user account using SECONDARY auth instance
-      // This prevents the admin from being logged out!
-      const cred = await createUserWithEmailAndPassword(
-        secondaryAuth,  // Use secondary auth instead of main auth
-        newUserEmail,
-        newUserPassword
-      );
+      // Check if user with this email already exists
+      const existingUser = users.find(u => u.email.toLowerCase() === newUserEmail.toLowerCase());
+      if (existingUser) {
+        return toast.error("This email is already registered");
+      }
 
       // Create user document in Firestore
+      // User will authenticate via Google Sign-In, so no Firebase Auth user is created here
       const docRef = await addDoc(collection(db, "users"), {
-        uid: cred.user.uid,
+        uid: "", // Will be populated when user signs in with Google
         name: newUserName.trim().charAt(0).toUpperCase() + newUserName.trim().slice(1).toLowerCase(),
         email: newUserEmail.toLowerCase(),
         role: newUserRole,
@@ -172,7 +167,7 @@ export default function Admin() {
       // Update local state
       setUsers(prev => [...prev, {
         id: docRef.id,
-        uid: cred.user.uid,
+        uid: "",
         name: newUserName.trim().charAt(0).toUpperCase() + newUserName.trim().slice(1).toLowerCase(),
         email: newUserEmail.toLowerCase(),
         role: newUserRole,
@@ -184,32 +179,14 @@ export default function Admin() {
 
       // Clear form
       setNewUserEmail("");
-      setNewUserPassword("");
       setNewUserName("");
       setNewUserRole("user");
 
-      toast.success(`User ${newUserEmail} created successfully!`);
-
-      // Sign out from secondary auth to clean up
-      await signOut(secondaryAuth);
+      toast.success(`User ${newUserEmail} created successfully! They can now sign in with Google.`);
 
     } catch (error) {
       console.error("User creation error:", error);
-
-      // Provide specific error messages
-      if (error.code === "auth/email-already-in-use") {
-        toast.error("This email is already registered");
-      } else if (error.code === "auth/invalid-email") {
-        toast.error("Invalid email address");
-      } else if (error.code === "auth/weak-password") {
-        toast.error("Password is too weak. Use at least 6 characters");
-      } else if (error.code === "auth/network-request-failed") {
-        toast.error("Network error. Please check your connection");
-      } else if (error.code === "auth/too-many-requests") {
-        toast.error("Too many attempts. Please try again later");
-      } else {
-        toast.error(`Failed to create user: ${error.message || "Unknown error"}`);
-      }
+      toast.error(`Failed to create user: ${error.message || "Unknown error"}`);
     }
   }
 
@@ -312,7 +289,10 @@ export default function Admin() {
 
   const SidebarItem = ({ id, icon: Icon, label }) => (
     <button
-      onClick={() => setTab(id)}
+      onClick={() => {
+        setTab(id);
+        setMobileMenuOpen(false);
+      }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${tab === id
         ? "bg-primary-500 text-white shadow-lg shadow-primary-500/30"
         : "text-slate-400 hover:bg-white/5 hover:text-white"
@@ -332,8 +312,37 @@ export default function Admin() {
         }
       }} />
 
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setMobileMenuOpen(true)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-dark-card border border-white/10 rounded-lg text-white hover:bg-white/5 transition-colors"
+      >
+        <Bars3Icon className="h-6 w-6" />
+      </button>
+
+      {/* Mobile Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-dark-card border-r border-white/5 p-6 flex flex-col">
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-50
+        w-64 bg-dark-card border-r border-white/5 p-6 flex flex-col
+        transform transition-transform duration-300 ease-in-out
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        {/* Mobile Close Button */}
+        <button
+          onClick={() => setMobileMenuOpen(false)}
+          className="lg:hidden absolute top-4 right-4 p-2 text-slate-400 hover:text-white transition-colors"
+        >
+          <XMarkIcon className="h-6 w-6" />
+        </button>
+
         <div className="mb-8 px-2">
           <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
             Admin Panel
@@ -358,21 +367,21 @@ export default function Admin() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
         <div className="max-w-7xl mx-auto animate-fade-in">
 
           {/* Users & Orgs Tab */}
           {tab === "usersOrgs" && (
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                 {/* Create User Card */}
-                <div className="bg-dark-card border border-white/5 p-6 rounded-2xl shadow-xl">
-                  <h2 className="text-xl font-heading font-semibold mb-6 flex items-center gap-2">
+                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
                     <PlusIcon className="h-5 w-5 text-primary-400" />
                     Create New User
                   </h2>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <input
                         className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
                         placeholder="Full Name"
@@ -386,16 +395,9 @@ export default function Admin() {
                         onChange={e => setNewUserEmail(e.target.value)}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <input
-                        className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
-                        placeholder="Password"
-                        type="password"
-                        value={newUserPassword}
-                        onChange={e => setNewUserPassword(e.target.value)}
-                      />
+                    <div>
                       <select
-                        className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
                         value={newUserRole}
                         onChange={e => setNewUserRole(e.target.value)}
                       >
@@ -403,6 +405,9 @@ export default function Admin() {
                         <option value="admin">Admin</option>
                       </select>
                     </div>
+                    <p className="text-xs text-slate-400 italic">
+                      Users will sign in using their Google account
+                    </p>
                     <button
                       className="w-full bg-primary-600 hover:bg-primary-500 text-white py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20"
                       onClick={createUser}
@@ -413,8 +418,8 @@ export default function Admin() {
                 </div>
 
                 {/* Create Org Card */}
-                <div className="bg-dark-card border border-white/5 p-6 rounded-2xl shadow-xl">
-                  <h2 className="text-xl font-heading font-semibold mb-6 flex items-center gap-2">
+                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
                     <BuildingOfficeIcon className="h-5 w-5 text-secondary-400" />
                     Organization Management
                   </h2>
@@ -467,44 +472,44 @@ export default function Admin() {
 
               {/* Users Table */}
               <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-                <div className="p-6 border-b border-white/5">
-                  <h2 className="text-xl font-heading font-semibold">User Directory</h2>
+                <div className="p-4 sm:p-6 border-b border-white/5">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold">User Directory</h2>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-white/5 text-slate-400 text-sm uppercase tracking-wider">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>
-                        <th className="px-6 py-4 font-medium">Name</th>
-                        <th className="px-6 py-4 font-medium">Email</th>
-                        <th className="px-6 py-4 font-medium">Role</th>
-                        <th className="px-6 py-4 font-medium">Organization</th>
-                        <th className="px-6 py-4 font-medium text-center">Leave Balance</th>
-                        <th className="px-6 py-4 font-medium text-right">Actions</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Name</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Email</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Role</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap hidden md:table-cell">Organization</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-center whitespace-nowrap">Leave</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {users.map(u => (
                         <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 font-medium">{u.name || "-"}</td>
-                          <td className="px-6 py-4 text-slate-400">{u.email}</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">{u.name || "-"}</td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400 max-w-[150px] truncate">{u.email}</td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
                               }`}>
                               {u.role}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-slate-400">{u.organizationName || "-"}</td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400 hidden md:table-cell">{u.organizationName || "-"}</td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-center whitespace-nowrap">
                             <span className="text-emerald-400 font-bold">{getRemainingLeaves(u.id)}</span>
                             <span className="text-slate-500 text-xs ml-1">/ {u.leaveDaysAssigned || 0}</span>
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
                             <button
-                              className="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-2 rounded-lg transition-all"
+                              className="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-1.5 sm:p-2 rounded-lg transition-all"
                               onClick={() => deleteUser(u.id)}
                               title="Delete User"
                             >
-                              <TrashIcon className="h-5 w-5" />
+                              <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                             </button>
                           </td>
                         </tr>
@@ -518,12 +523,12 @@ export default function Admin() {
 
           {/* Leave Management Tab */}
           {tab === "leaveMgmt" && (
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                 {/* Configuration Card */}
-                <div className="bg-dark-card border border-white/5 p-6 rounded-2xl shadow-xl space-y-8">
+                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl space-y-6 sm:space-y-8">
                   <div>
-                    <h2 className="text-xl font-heading font-semibold mb-6">Leave Allocation</h2>
+                    <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Leave Allocation</h2>
                     <div className="flex gap-3">
                       <select
                         className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
@@ -554,8 +559,8 @@ export default function Admin() {
                     )}
                   </div>
 
-                  <div className="border-t border-white/5 pt-8">
-                    <h2 className="text-xl font-heading font-semibold mb-6">Working Days</h2>
+                  <div className="border-t border-white/5 pt-6 sm:pt-8">
+                    <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Working Days</h2>
                     <div className="flex flex-wrap gap-3 mb-6">
                       {WEEK.map(day => (
                         <label key={day} className={`
@@ -584,8 +589,8 @@ export default function Admin() {
                 </div>
 
                 {/* Book Leave Card */}
-                <div className="bg-dark-card border border-white/5 p-6 rounded-2xl shadow-xl">
-                  <h2 className="text-xl font-heading font-semibold mb-6">Book Leave</h2>
+                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Book Leave</h2>
                   <div className="space-y-4">
                     <select
                       className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
@@ -596,7 +601,7 @@ export default function Admin() {
                       {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                     </select>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs text-slate-400 mb-1 ml-1">From</label>
                         <input
@@ -617,7 +622,7 @@ export default function Admin() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <select
                         className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
                         value={leaveType}
@@ -656,8 +661,8 @@ export default function Admin() {
 
               {/* Requests Table */}
               <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-                <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                  <h2 className="text-xl font-heading font-semibold">Leave Requests</h2>
+                <div className="p-4 sm:p-6 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold">Leave Requests</h2>
                   <button
                     className="text-red-400 hover:text-red-300 text-sm font-medium hover:underline"
                     onClick={clearLeaveRequests}
@@ -666,57 +671,57 @@ export default function Admin() {
                   </button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-white/5 text-slate-400 text-sm uppercase tracking-wider">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-white/5 text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>
-                        <th className="px-6 py-4 font-medium">User</th>
-                        <th className="px-6 py-4 font-medium">Dates</th>
-                        <th className="px-6 py-4 font-medium">Details</th>
-                        <th className="px-6 py-4 font-medium">Status</th>
-                        <th className="px-6 py-4 font-medium text-right">Actions</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">User</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Dates</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap hidden md:table-cell">Details</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Status</th>
+                        <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {leaveRequests.map(l => (
                         <tr key={l.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 font-medium">{l.userName}</td>
-                          <td className="px-6 py-4 text-slate-400">
-                            <div className="flex flex-col text-sm">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">{l.userName}</td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400">
+                            <div className="flex flex-col text-xs sm:text-sm">
                               <span>{l.from}</span>
                               <span className="text-slate-600">to</span>
                               <span>{l.to}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
                             <div className="flex flex-col gap-1">
                               <span className="text-sm font-medium">{l.category}</span>
                               <span className="text-xs text-slate-500">{l.type}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' :
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-medium ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' :
                               l.status === 'Rejected' ? 'bg-red-500/20 text-red-300' :
                                 'bg-amber-500/20 text-amber-300'
                               }`}>
                               {l.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
                             {l.status === "Pending" && (
-                              <div className="flex justify-end gap-2">
+                              <div className="flex justify-end gap-1 sm:gap-2">
                                 <button
-                                  className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                                  className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                                   onClick={() => setLeaveStatus(l.id, "Approved")}
                                   title="Approve"
                                 >
-                                  <CheckCircleIcon className="h-6 w-6" />
+                                  <CheckCircleIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                                 </button>
                                 <button
-                                  className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                  className="p-1 sm:p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                                   onClick={() => setLeaveStatus(l.id, "Rejected")}
                                   title="Reject"
                                 >
-                                  <XCircleIcon className="h-6 w-6" />
+                                  <XCircleIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                                 </button>
                               </div>
                             )}
@@ -733,25 +738,25 @@ export default function Admin() {
           {/* Notifications Tab */}
           {tab === "notificationsTab" && (
             <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden max-w-3xl mx-auto">
-              <div className="p-6 border-b border-white/5">
-                <h2 className="text-xl font-heading font-semibold">Notifications</h2>
+              <div className="p-4 sm:p-6 border-b border-white/5">
+                <h2 className="text-lg sm:text-xl font-heading font-semibold">Notifications</h2>
               </div>
               <ul className="divide-y divide-white/5">
                 {notifications.length === 0 && (
-                  <li className="p-8 text-center text-slate-500">No notifications yet</li>
+                  <li className="p-6 sm:p-8 text-center text-slate-500">No notifications yet</li>
                 )}
                 {notifications.map(n => (
-                  <li key={n.id} className={`p-6 transition-colors ${n.read ? 'bg-transparent' : 'bg-primary-500/5'}`}>
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex gap-4">
-                        <div className={`mt-1 h-2 w-2 rounded-full ${n.read ? 'bg-slate-600' : 'bg-primary-500'}`} />
-                        <p className={`${n.read ? 'text-slate-400' : 'text-white font-medium'}`}>
+                  <li key={n.id} className={`p-4 sm:p-6 transition-colors ${n.read ? 'bg-transparent' : 'bg-primary-500/5'}`}>
+                    <div className="flex justify-between items-start gap-3 sm:gap-4">
+                      <div className="flex gap-3 sm:gap-4">
+                        <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-600' : 'bg-primary-500'}`} />
+                        <p className={`text-sm sm:text-base ${n.read ? 'text-slate-400' : 'text-white font-medium'}`}>
                           {n.message}
                         </p>
                       </div>
                       {!n.read && (
                         <button
-                          className="text-xs font-medium text-primary-400 hover:text-primary-300 whitespace-nowrap"
+                          className="text-xs font-medium text-primary-400 hover:text-primary-300 whitespace-nowrap flex-shrink-0"
                           onClick={() => markRead(n.id)}
                         >
                           Mark as Read
