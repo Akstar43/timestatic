@@ -1,0 +1,386 @@
+// src/pages/Profile.jsx
+import React, { useEffect, useState } from "react";
+import { collection, getDocs, doc, updateDoc, query, where } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { db, storage } from "../firebase/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useNavigate } from "react-router-dom";
+import {
+    UserCircleIcon,
+    EnvelopeIcon,
+    BuildingOfficeIcon,
+    CalendarDaysIcon,
+    ArrowLeftIcon,
+    CameraIcon,
+    CheckCircleIcon
+} from "@heroicons/react/24/outline";
+import toast, { Toaster } from "react-hot-toast";
+
+export default function Profile() {
+    const auth = getAuth();
+    const navigate = useNavigate();
+    const currentUserId = auth.currentUser?.uid;
+
+    const [userData, setUserData] = useState(null);
+    const [userDocId, setUserDocId] = useState(null);
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [organization, setOrganization] = useState("");
+    const [photoURL, setPhotoURL] = useState("");
+    const [isEditing, setIsEditing] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [leaves, setLeaves] = useState([]);
+
+    useEffect(() => {
+        loadUserData();
+        loadLeaves();
+    }, []);
+
+    async function loadUserData() {
+        try {
+            const q = query(collection(db, "users"), where("uid", "==", currentUserId));
+            const snapshot = await getDocs(q);
+
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0];
+                const data = doc.data();
+                setUserDocId(doc.id);
+                setUserData(data);
+                setName(data.name || "");
+                setEmail(data.email || "");
+                setOrganization(data.organizationName || "");
+                setPhotoURL(data.photoURL || "");
+            }
+        } catch (error) {
+            toast.error("Failed to load profile data");
+            console.error(error);
+        }
+    }
+
+    async function loadLeaves() {
+        try {
+            const snapshot = await getDocs(collection(db, "leaveRequests"));
+            const allLeaves = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            const userLeaves = allLeaves.filter(l => l.userId === currentUserId);
+            setLeaves(userLeaves);
+        } catch (error) {
+            console.error("Failed to load leaves:", error);
+        }
+    }
+
+    async function handleSave() {
+        if (!userDocId) return toast.error("User document not found");
+
+        try {
+            await updateDoc(doc(db, "users", userDocId), {
+                name,
+                organizationName: organization
+            });
+
+            setUserData(prev => ({ ...prev, name, organizationName: organization }));
+            setIsEditing(false);
+            toast.success("Profile updated successfully");
+        } catch (error) {
+            toast.error("Failed to update profile");
+            console.error(error);
+        }
+    }
+
+    async function handlePhotoUpload(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            toast.error("Please upload an image file");
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("Image size should be less than 5MB");
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const storageRef = ref(storage, `profile-pictures/${currentUserId}/${Date.now()}_${file.name}`);
+            await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(storageRef);
+
+            await updateDoc(doc(db, "users", userDocId), {
+                photoURL: downloadURL
+            });
+
+            setPhotoURL(downloadURL);
+            setUserData(prev => ({ ...prev, photoURL: downloadURL }));
+            toast.success("Profile picture updated");
+        } catch (error) {
+            toast.error("Failed to upload photo");
+            console.error(error);
+        } finally {
+            setUploading(false);
+        }
+    }
+
+    function getLeaveStats() {
+        const total = userData?.leaveDaysAssigned || 0;
+        const approved = leaves.filter(l => l.status === "Approved" && l.type === "Deductable").length;
+        const pending = leaves.filter(l => l.status === "Pending").length;
+        const rejected = leaves.filter(l => l.status === "Rejected").length;
+
+        const used = leaves
+            .filter(l => l.status === "Approved" && l.type === "Deductable")
+            .reduce((sum, l) => {
+                const fromDate = new Date(l.from);
+                const toDate = new Date(l.to);
+                return sum + (Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1);
+            }, 0);
+
+        return { total, used, remaining: total - used, approved, pending, rejected };
+    }
+
+    const stats = getLeaveStats();
+
+    return (
+        <div className="min-h-screen bg-dark-bg text-dark-text font-sans">
+            <Toaster position="top-right" toastOptions={{
+                style: {
+                    background: '#1e293b',
+                    color: '#fff',
+                }
+            }} />
+
+            {/* Header */}
+            <header className="bg-dark-card border-b border-white/5 px-8 py-4 sticky top-0 z-50 backdrop-blur-md bg-dark-card/80">
+                <div className="max-w-5xl mx-auto flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => navigate('/user-dashboard')}
+                            className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-white"
+                        >
+                            <ArrowLeftIcon className="h-5 w-5" />
+                        </button>
+                        <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
+                            My Profile
+                        </h1>
+                    </div>
+                </div>
+            </header>
+
+            <main className="max-w-5xl mx-auto p-8 space-y-8 animate-fade-in">
+                {/* Profile Card */}
+                <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
+                    {/* Cover Image */}
+                    <div className="h-32 bg-gradient-to-r from-primary-600 via-secondary-600 to-primary-600"></div>
+
+                    {/* Profile Info */}
+                    <div className="px-8 pb-8">
+                        <div className="flex flex-col md:flex-row gap-6 -mt-16 mb-6">
+                            {/* Profile Picture */}
+                            <div className="relative">
+                                <div className="w-32 h-32 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center border-4 border-dark-card shadow-xl">
+                                    {photoURL ? (
+                                        <img src={photoURL} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-white font-bold text-4xl">{name?.charAt(0) || 'U'}</span>
+                                    )}
+                                </div>
+                                <label className="absolute bottom-0 right-0 p-2 bg-primary-600 hover:bg-primary-500 rounded-full cursor-pointer shadow-lg transition-colors">
+                                    <CameraIcon className="h-5 w-5 text-white" />
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handlePhotoUpload}
+                                        disabled={uploading}
+                                    />
+                                </label>
+                                {uploading && (
+                                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* User Info */}
+                            <div className="flex-1 mt-16 md:mt-0">
+                                {!isEditing ? (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <h2 className="text-3xl font-heading font-bold text-white">{name || "User"}</h2>
+                                            <p className="text-slate-400 mt-1">{email}</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-4">
+                                            <div className="flex items-center gap-2 text-slate-300">
+                                                <BuildingOfficeIcon className="h-5 w-5 text-slate-400" />
+                                                <span>{organization || "No organization"}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-slate-300">
+                                                <CalendarDaysIcon className="h-5 w-5 text-slate-400" />
+                                                <span>{stats.remaining} days remaining</span>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setIsEditing(true)}
+                                            className="mt-4 bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20"
+                                        >
+                                            Edit Profile
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm text-slate-400 ml-1">Full Name</label>
+                                            <input
+                                                type="text"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm text-slate-400 ml-1">Email (Read-only)</label>
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                disabled
+                                                className="w-full bg-dark-bg/50 border border-white/10 rounded-lg px-4 py-2.5 text-slate-500 cursor-not-allowed"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm text-slate-400 ml-1">Organization (Read-only)</label>
+                                            <input
+                                                type="text"
+                                                value={organization}
+                                                disabled
+                                                className="w-full bg-dark-bg/50 border border-white/10 rounded-lg px-4 py-2.5 text-slate-500 cursor-not-allowed"
+                                            />
+                                        </div>
+                                        <div className="flex gap-3 mt-6">
+                                            <button
+                                                onClick={handleSave}
+                                                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-emerald-600/20 flex items-center gap-2"
+                                            >
+                                                <CheckCircleIcon className="h-5 w-5" />
+                                                Save Changes
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setIsEditing(false);
+                                                    setName(userData?.name || "");
+                                                    setOrganization(userData?.organizationName || "");
+                                                }}
+                                                className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Leave Statistics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="bg-gradient-to-br from-primary-600 to-primary-700 border border-primary-500/20 rounded-2xl shadow-xl p-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-primary-100 text-sm font-medium">Total Leave Days</span>
+                            <CalendarDaysIcon className="h-5 w-5 text-primary-200" />
+                        </div>
+                        <div className="text-3xl font-bold text-white">{stats.total}</div>
+                        <p className="text-xs text-primary-200 mt-1">Allocated this year</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 border border-emerald-500/20 rounded-2xl shadow-xl p-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-emerald-100 text-sm font-medium">Remaining</span>
+                            <CalendarDaysIcon className="h-5 w-5 text-emerald-200" />
+                        </div>
+                        <div className="text-3xl font-bold text-white">{stats.remaining}</div>
+                        <p className="text-xs text-emerald-200 mt-1">Available to use</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-amber-600 to-amber-700 border border-amber-500/20 rounded-2xl shadow-xl p-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-amber-100 text-sm font-medium">Pending</span>
+                            <CalendarDaysIcon className="h-5 w-5 text-amber-200" />
+                        </div>
+                        <div className="text-3xl font-bold text-white">{stats.pending}</div>
+                        <p className="text-xs text-amber-200 mt-1">Awaiting approval</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-blue-600 to-blue-700 border border-blue-500/20 rounded-2xl shadow-xl p-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-blue-100 text-sm font-medium">Approved</span>
+                            <CheckCircleIcon className="h-5 w-5 text-blue-200" />
+                        </div>
+                        <div className="text-3xl font-bold text-white">{stats.approved}</div>
+                        <p className="text-xs text-blue-200 mt-1">Requests approved</p>
+                    </div>
+                </div>
+
+                {/* Recent Leave Requests */}
+                <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
+                    <div className="p-6 border-b border-white/5">
+                        <h2 className="text-xl font-heading font-semibold">Recent Leave Requests</h2>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-white/5 text-slate-400 text-sm uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4 font-medium">Dates</th>
+                                    <th className="px-6 py-4 font-medium">Type</th>
+                                    <th className="px-6 py-4 font-medium">Category</th>
+                                    <th className="px-6 py-4 font-medium">Reason</th>
+                                    <th className="px-6 py-4 font-medium">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {leaves.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
+                                            No leave requests yet
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    leaves.slice(0, 10).map(leave => (
+                                        <tr key={leave.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 text-slate-400">
+                                                <div className="flex flex-col text-sm">
+                                                    <span>{new Date(leave.from).toLocaleDateString()}</span>
+                                                    <span className="text-slate-600">to</span>
+                                                    <span>{new Date(leave.to).toLocaleDateString()}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${leave.type === 'Deductable'
+                                                        ? 'bg-orange-500/20 text-orange-300'
+                                                        : 'bg-blue-500/20 text-blue-300'
+                                                    }`}>
+                                                    {leave.type}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-slate-300">{leave.category}</td>
+                                            <td className="px-6 py-4 text-slate-400 max-w-xs truncate">{leave.reason || "-"}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${leave.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' :
+                                                        leave.status === 'Rejected' ? 'bg-red-500/20 text-red-300' :
+                                                            'bg-amber-500/20 text-amber-300'
+                                                    }`}>
+                                                    {leave.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
