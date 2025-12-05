@@ -367,7 +367,7 @@ export default function Admin() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
         <div className="max-w-7xl mx-auto animate-fade-in">
 
           {/* Users & Orgs Tab */}
@@ -475,7 +475,7 @@ export default function Admin() {
                 <div className="p-4 sm:p-6 border-b border-white/5">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold">User Directory</h2>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-white/5 text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>
@@ -670,7 +670,7 @@ export default function Admin() {
                     Clear History
                   </button>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-white/5 text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>

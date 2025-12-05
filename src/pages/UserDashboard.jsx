@@ -53,18 +53,28 @@ export default function UserDashboard() {
   }, []);
 
   async function loadUsers() {
-    const snapshot = await getDocs(collection(db, "users"));
-    const usersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    setUsers(usersData);
+    try {
+      const snapshot = await getDocs(collection(db, "users"));
+      const usersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setUsers(usersData);
 
-    // Find current user data
-    const userData = usersData.find(u => u.uid === currentUserId);
-    setCurrentUserData(userData);
+      // Find current user data
+      if (currentUserId) {
+        const userData = usersData.find(u => u.uid === currentUserId);
+        setCurrentUserData(userData);
+      }
+    } catch (error) {
+      console.error("Error loading users:", error);
+    }
   }
 
   async function loadLeaves() {
-    const snapshot = await getDocs(collection(db, "leaveRequests"));
-    setLeaves(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    try {
+      const snapshot = await getDocs(collection(db, "leaveRequests"));
+      setLeaves(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Error loading leaves:", error);
+    }
   }
 
   // Calculate leave balance for current user
@@ -330,100 +340,102 @@ export default function UserDashboard() {
           </div>
 
           {/* Calendar Grid */}
-          <div className="overflow-x-auto">
-            <div className="min-w-[800px]">
-              {/* Header Row - Days of the Week */}
-              <div className="grid grid-cols-8 border-b border-white/5 bg-dark-bg/30">
-                <div className="p-4 border-r border-white/5">
-                  <span className="text-xs text-slate-400 font-medium uppercase">Team Member</span>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="px-4 sm:px-0">
+              <div className="min-w-[800px]">
+                {/* Header Row - Days of the Week */}
+                <div className="grid grid-cols-8 border-b border-white/5 bg-dark-bg/30">
+                  <div className="p-4 border-r border-white/5">
+                    <span className="text-xs text-slate-400 font-medium uppercase">Team Member</span>
+                  </div>
+                  {weekDates.map((date, idx) => {
+                    const isToday = date.toDateString() === new Date().toDateString();
+                    return (
+                      <div key={idx} className="p-4 text-center border-r border-white/5 last:border-r-0">
+                        <div className="text-xs text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
+                        <div className={`text-lg font-bold ${isToday ? 'text-primary-400' : 'text-white'}`}>
+                          {date.getDate()}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {date.toLocaleDateString('en-US', { month: 'short' })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                {weekDates.map((date, idx) => {
-                  const isToday = date.toDateString() === new Date().toDateString();
-                  return (
-                    <div key={idx} className="p-4 text-center border-r border-white/5 last:border-r-0">
-                      <div className="text-xs text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
-                      <div className={`text-lg font-bold ${isToday ? 'text-primary-400' : 'text-white'}`}>
-                        {date.getDate()}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        {date.toLocaleDateString('en-US', { month: 'short' })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
 
-              {/* User Rows */}
-              {users.length > 0 ? (
-                users.map((user) => (
-                  <div key={user.id} className="grid grid-cols-8 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                    {/* User Info Cell */}
-                    <div className="p-4 border-r border-white/5 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center flex-shrink-0">
-                        {user.photoURL ? (
-                          <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-white font-medium text-sm">{user.name?.charAt(0) || 'U'}</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-white truncate">{user.name || 'Unknown'}</div>
-                        <div className="text-xs text-slate-400 truncate">{user.email || ''}</div>
-                      </div>
-                    </div>
-
-                    {/* Day Cells for this User */}
-                    {weekDates.map((date, dayIdx) => {
-                      // Find leaves for this user on this specific date
-                      const userLeavesOnDay = leaves.filter(l => {
-                        const lStart = new Date(l.from);
-                        const lEnd = new Date(l.to);
-                        return l.userId === user.uid && lStart <= date && lEnd >= date;
-                      });
-
-                      return (
-                        <div key={dayIdx} className="p-2 border-r border-white/5 last:border-r-0 min-h-[80px]">
-                          {userLeavesOnDay.length > 0 ? (
-                            <div className="space-y-1">
-                              {userLeavesOnDay.map(leave => {
-                                const bgClass = getCategoryColor(leave.category);
-                                return (
-                                  <div
-                                    key={leave.id}
-                                    className={`${bgClass} rounded-md p-2 text-center hover:scale-105 transition-transform cursor-pointer`}
-                                    title={`${leave.category}${leave.isHalfDay ? ' (Half Day)' : ''}\n${leave.reason || ''}\nStatus: ${leave.status}`}
-                                  >
-                                    <div className="text-[10px] text-white/90 font-medium truncate">
-                                      {leave.category}
-                                    </div>
-                                    {leave.isHalfDay && (
-                                      <div className="text-[9px] text-white/70">Half Day</div>
-                                    )}
-                                    <div className={`text-[9px] mt-1 px-1 py-0.5 rounded ${leave.status === 'Approved' ? 'bg-green-500/30 text-green-200' :
-                                      leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
-                                        'bg-yellow-500/30 text-yellow-200'
-                                      }`}>
-                                      {leave.status}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                {/* User Rows */}
+                {users.length > 0 ? (
+                  users.map((user) => (
+                    <div key={user.id} className="grid grid-cols-8 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                      {/* User Info Cell */}
+                      <div className="p-4 border-r border-white/5 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center flex-shrink-0">
+                          {user.photoURL ? (
+                            <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="h-full flex items-center justify-center">
-                              <div className="w-1 h-1 rounded-full bg-slate-700/50"></div>
-                            </div>
+                            <span className="text-white font-medium text-sm">{user.name?.charAt(0) || 'U'}</span>
                           )}
                         </div>
-                      );
-                    })}
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-white truncate">{user.name || 'Unknown'}</div>
+                          <div className="text-xs text-slate-400 truncate">{user.email || ''}</div>
+                        </div>
+                      </div>
+
+                      {/* Day Cells for this User */}
+                      {weekDates.map((date, dayIdx) => {
+                        // Find leaves for this user on this specific date
+                        const userLeavesOnDay = leaves.filter(l => {
+                          const lStart = new Date(l.from);
+                          const lEnd = new Date(l.to);
+                          return l.userId === user.uid && lStart <= date && lEnd >= date;
+                        });
+
+                        return (
+                          <div key={dayIdx} className="p-2 border-r border-white/5 last:border-r-0 min-h-[80px]">
+                            {userLeavesOnDay.length > 0 ? (
+                              <div className="space-y-1">
+                                {userLeavesOnDay.map(leave => {
+                                  const bgClass = getCategoryColor(leave.category);
+                                  return (
+                                    <div
+                                      key={leave.id}
+                                      className={`${bgClass} rounded-md p-2 text-center hover:scale-105 transition-transform cursor-pointer`}
+                                      title={`${leave.category}${leave.isHalfDay ? ' (Half Day)' : ''}\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                    >
+                                      <div className="text-[10px] text-white/90 font-medium truncate">
+                                        {leave.category}
+                                      </div>
+                                      {leave.isHalfDay && (
+                                        <div className="text-[9px] text-white/70">Half Day</div>
+                                      )}
+                                      <div className={`text-[9px] mt-1 px-1 py-0.5 rounded ${leave.status === 'Approved' ? 'bg-green-500/30 text-green-200' :
+                                        leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
+                                          'bg-yellow-500/30 text-yellow-200'
+                                        }`}>
+                                        {leave.status}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="h-full flex items-center justify-center">
+                                <div className="w-1 h-1 rounded-full bg-slate-700/50"></div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 text-center text-slate-500">
+                    No team members found
                   </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-slate-500">
-                  No team members found
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>

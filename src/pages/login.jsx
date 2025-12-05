@@ -1,69 +1,16 @@
 // src/pages/Login.jsx
 import React, { useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs, query, where, addDoc, setDoc, doc, updateDoc } from "firebase/firestore";
-import { db, googleProvider, ts } from "../firebase/firebase";
+import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
+import { db, googleProvider } from "../firebase/firebase";
 import { signInWithPopup } from "firebase/auth";
 import { getAuth } from "firebase/auth";
-import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 
 export default function Login() {
-  const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("user"); // toggle between 'user' and 'admin'
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      setError("");
-
-      // Login via Firebase Authentication
-      const userCredential = await login(email, password);
-      const uid = userCredential.user.uid;
-
-      // Fetch user data from Firestore to check role
-      const q = query(collection(db, "users"), where("uid", "==", uid));
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        setError("User not found in database. Please contact your administrator.");
-        setIsLoading(false);
-        return;
-      }
-
-      const userData = snapshot.docs[0].data();
-      const userRole = userData.role || "user";
-
-      // Check if user's role matches the selected portal
-      if (role === "admin") {
-        if (userRole !== "admin") {
-          setError("Access denied: You don't have admin privileges");
-          setIsLoading(false);
-          return;
-        }
-        navigate("/admin");
-      } else {
-        if (userRole !== "user") {
-          setError("Access denied: Please use the admin portal");
-          setIsLoading(false);
-          return;
-        }
-        navigate("/user-dashboard");
-      }
-    } catch (e) {
-      console.error(e);
-      setError("Invalid email or password");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -156,69 +103,6 @@ export default function Login() {
           >
             Admin Portal
           </button>
-        </div>
-
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-primary-100 ml-1">Email Address</label>
-            <input
-              type="email"
-              required
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all duration-200"
-              placeholder="name@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-primary-100 ml-1">Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all duration-200"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white transition-colors p-1"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-400 hover:to-secondary-400 text-white py-3.5 rounded-xl font-semibold shadow-lg shadow-primary-500/30 transform transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {isLoading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing in...
-              </span>
-            ) : (
-              "Sign In"
-            )}
-          </button>
-        </form>
-
-        {/* Divider */}
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/20"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-transparent text-white/50">Or continue with</span>
-          </div>
         </div>
 
         {/* Google Sign-In Button */}
