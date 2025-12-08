@@ -5,6 +5,7 @@ import { getAuth } from "firebase/auth";
 import { db, ts } from "../firebase/firebase";
 import { useNavigate } from "react-router-dom";
 import { LEAVE_CATEGORIES } from "../context/leavetypes"; // Shared categories
+import toast, { Toaster } from "react-hot-toast";
 import {
   CalendarDaysIcon,
   ClockIcon,
@@ -29,6 +30,7 @@ export default function UserDashboard() {
   const [reason, setReason] = useState("");
   const [selectedWeek, setSelectedWeek] = useState(getMonday(new Date()));
   const [currentUserData, setCurrentUserData] = useState(null);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
 
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -157,8 +159,8 @@ export default function UserDashboard() {
   }
 
   function bookLeave() {
-    if (!currentUserId) return alert("User not found, login again.");
-    if (!fromDateStr || !toDateStr) return alert("Select leave dates");
+    if (!currentUserId) return toast.error("User not found, login again.");
+    if (!fromDateStr || !toDateStr) return toast.error("Select leave dates");
 
     const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
     const isHalfDay = timePeriod !== "Full Day";
@@ -179,11 +181,16 @@ export default function UserDashboard() {
 
     addDoc(collection(db, "leaveRequests"), leave)
       .then(() => {
-        alert("Leave request submitted");
+        toast.success("Leave request submitted successfully");
         setFromDateStr(""); setToDateStr(""); setReason("");
         setLeaveCategory("Holiday");
         setTimePeriod("Full Day");
+        setIsBookingOpen(false); // Close form
         loadLeaves();
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error("Failed to submit leave request");
       });
   }
 
@@ -196,6 +203,12 @@ export default function UserDashboard() {
 
   return (
     <div className="min-h-screen bg-dark-bg text-dark-text font-sans">
+      <Toaster position="top-right" toastOptions={{
+        style: {
+          background: '#1e293b',
+          color: '#fff',
+        }
+      }} />
       {/* Header */}
       <header className="bg-dark-card border-b border-white/5 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-dark-card/80">
         <h1 className="text-lg sm:text-xl lg:text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
@@ -258,92 +271,111 @@ export default function UserDashboard() {
           </div>
         </div>
 
-        {/* Leave Booking Card */}
-        <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl p-4 sm:p-6">
-          <div className="flex items-center gap-3 mb-4 sm:mb-6">
-            <div className="p-2 bg-primary-500/10 rounded-lg">
-              <PlusCircleIcon className="h-5 w-5 sm:h-6 sm:w-6 text-primary-400" />
-            </div>
-            <h2 className="text-lg sm:text-xl font-heading font-semibold">Request Leave</h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 ml-1">From (date)</label>
-              <input
-                type="date"
-                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
-                value={fromDateStr}
-                onChange={e => setFromDateStr(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 ml-1">To (date)</label>
-              <input
-                type="date"
-                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
-                value={toDateStr}
-                onChange={e => setToDateStr(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 ml-1">Leave Type</label>
-              <select
-                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
-                value={selectedLeaveType}
-                onChange={e => setSelectedLeaveType(e.target.value)}
-              >
-                <option value="Deductable">Deductable</option>
-                <option value="Non-Deductable">Non-Deductable</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 ml-1">Leave Category</label>
-              <select
-                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
-                value={leaveCategory}
-                onChange={e => setLeaveCategory(e.target.value)}
-              >
-                {Object.keys(LEAVE_CATEGORIES)
-                  .filter(cat => LEAVE_CATEGORIES[cat].type === selectedLeaveType)
-                  .map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-slate-400 ml-1">Time Period</label>
-              <select
-                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
-                value={timePeriod}
-                onChange={e => setTimePeriod(e.target.value)}
-              >
-                <option value="Full Day">Full Day</option>
-                <option value="Morning">Start of Day (Morning)</option>
-                <option value="Afternoon">Afternoon</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end">
-            <input
-              className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
-              placeholder="Reason for leave..."
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-            />
-            {/* Half Day Checkbox Removed - Handled by Time Period dropdown above */}
-            <button
-              className="bg-primary-600 hover:bg-primary-500 text-white px-6 sm:px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20 w-full sm:w-auto"
-              onClick={bookLeave}
-            >
-              Submit Request
-            </button>
-          </div>
+        {/* User Actions */}
+        {/* User Actions */}
+        <div className="flex justify-end">
+          <button
+            className={`${isBookingOpen ? 'bg-red-600 hover:bg-red-500' : 'bg-primary-600 hover:bg-primary-500'} text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-primary-600/20 hover:shadow-primary-600/40 transition-all hover:-translate-y-0.5`}
+            onClick={() => setIsBookingOpen(!isBookingOpen)}
+          >
+            {isBookingOpen ? (
+              <>Cancel Booking</>
+            ) : (
+              <>
+                <PlusCircleIcon className="h-6 w-6" />
+                Book New Leave
+              </>
+            )}
+          </button>
         </div>
+
+        {/* Leave Booking Card */}
+        {isBookingOpen && (
+          <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl p-4 sm:p-6 animate-fade-in">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 bg-primary-500/10 rounded-lg">
+                <PlusCircleIcon className="h-5 w-5 sm:h-6 sm:w-6 text-primary-400" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-heading font-semibold">Request Leave</h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400 ml-1">From (date)</label>
+                <input
+                  type="date"
+                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  value={fromDateStr}
+                  onChange={e => setFromDateStr(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400 ml-1">To (date)</label>
+                <input
+                  type="date"
+                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  value={toDateStr}
+                  onChange={e => setToDateStr(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400 ml-1">Leave Type</label>
+                <select
+                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  value={selectedLeaveType}
+                  onChange={e => setSelectedLeaveType(e.target.value)}
+                >
+                  <option value="Deductable">Deductable</option>
+                  <option value="Non-Deductable">Non-Deductable</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400 ml-1">Leave Category</label>
+                <select
+                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  value={leaveCategory}
+                  onChange={e => setLeaveCategory(e.target.value)}
+                >
+                  {Object.keys(LEAVE_CATEGORIES)
+                    .filter(cat => LEAVE_CATEGORIES[cat].type === selectedLeaveType)
+                    .map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400 ml-1">Time Period</label>
+                <select
+                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  value={timePeriod}
+                  onChange={e => setTimePeriod(e.target.value)}
+                >
+                  <option value="Full Day">Full Day</option>
+                  <option value="Morning">Start of Day (Morning)</option>
+                  <option value="Afternoon">Afternoon</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end">
+              <input
+                className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                placeholder="Reason for leave..."
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+              />
+              <button
+                className="bg-primary-600 hover:bg-primary-500 text-white px-6 sm:px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20 w-full sm:w-auto"
+                onClick={bookLeave}
+              >
+                Submit Request
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Weekly Calendar */}
         <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
