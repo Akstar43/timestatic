@@ -2,6 +2,18 @@
   text-align: center;
   background-color: #282c34;
 }
+/* Makes calendar icon white on datetime-local input fields */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);        /* Turns icon white */
+    opacity: 0.8;
+    cursor: pointer;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: brightness(0) invert(1);
+}
+
+
 
 .App-logo {
   height: 40vmin;
