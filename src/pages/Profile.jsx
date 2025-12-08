@@ -210,7 +210,7 @@ export default function Profile() {
                                 {!isEditing ? (
                                     <div className="space-y-4">
                                         <div>
-                                            <h2 className="text-3xl font-heading font-bold text-slate-900 dark:text-white">{name || "User"}</h2>
+                                            <h2 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-md">{name || "User"}</h2>
                                             <p className="text-slate-500 dark:text-slate-400 mt-1">{email}</p>
                                         </div>
                                         <div className="flex flex-wrap gap-4">
@@ -286,7 +286,7 @@ export default function Profile() {
                 </div>
 
                 {/* Leave Statistics */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className="bg-gradient-to-br from-primary-600 to-primary-700 border border-primary-500/20 rounded-2xl shadow-xl p-6">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-primary-100 text-sm font-medium">Total Leave Days</span>

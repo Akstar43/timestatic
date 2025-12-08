@@ -36,23 +36,30 @@ export default function UserDashboard() {
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   // Simple hardcoded holidays for demo purposes
-  const HOLIDAYS = {
-    "2025-12-25": "Christmas Day",
-    "2025-12-26": "Boxing Day",
-    "2026-01-01": "New Year's Day",
-    "2026-04-10": "Good Friday",
-    "2026-04-13": "Easter Monday",
-    "2026-05-01": "Early May Bank Holiday",
-    "2026-05-29": "Spring Bank Holiday",
-    "2026-08-28": "Summer Bank Holiday",
-    "2026-12-25": "Christmas Day",
-    "2026-12-26": "Boxing Day"
-  };
+  const [holidays, setHolidays] = useState([]);
+
+  useEffect(() => {
+    loadHolidays();
+  }, []);
+
+  async function loadHolidays() {
+    try {
+      const snapshot = await getDocs(collection(db, "publicHolidays"));
+      const holidayData = {};
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        holidayData[data.date] = data.name;
+      });
+      setHolidays(holidayData);
+    } catch (err) {
+      console.error("Error loading holidays:", err);
+    }
+  }
 
   const getHoliday = (date) => {
     const d = new Date(date);
     const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return HOLIDAYS[dateStr];
+    return holidays[dateStr];
   };
 
 
@@ -295,9 +302,9 @@ export default function UserDashboard() {
 
         {/* User Actions */}
         {/* User Actions */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pb-4 sm:pb-0">
           <button
-            className={`${isBookingOpen ? 'bg-red-600 hover:bg-red-500' : 'bg-primary-600 hover:bg-primary-500'} text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-primary-600/20 hover:shadow-primary-600/40 transition-all hover:-translate-y-0.5`}
+            className={`${isBookingOpen ? 'bg-red-600 hover:bg-red-500' : 'bg-primary-600 hover:bg-primary-500'} text-white w-full sm:w-auto px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-600/20 hover:shadow-primary-600/40 transition-all hover:-translate-y-0.5`}
             onClick={() => setIsBookingOpen(!isBookingOpen)}
           >
             {isBookingOpen ? (
@@ -447,22 +454,22 @@ export default function UserDashboard() {
           {/* Calendar grid */}
           <div className="overflow-x-auto -mx-4 sm:mx-0">
             <div className="px-4 sm:px-0">
-              <div className="min-w-[800px]">
+              <div className="min-w-[900px]">
                 {/* header */}
-                <div className="grid grid-cols-8 border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-bg/30">
-                  <div className="p-4 border-r border-slate-200 dark:border-white/5">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">Team Member</span>
+                <div className="grid grid-cols-[180px_repeat(7,1fr)] sm:grid-cols-[220px_repeat(7,1fr)] border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-bg/30">
+                  <div className="sticky left-0 z-20 p-4 border-r border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-dark-card shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase whitespace-nowrap">Team Member</span>
                   </div>
                   {weekDates.map((date, idx) => {
                     const isToday = date.toDateString() === new Date().toDateString();
                     const holiday = getHoliday(date);
                     return (
-                      <div key={idx} className={`p-4 text-center border-r border-slate-200 dark:border-white/5 last:border-r-0 ${holiday ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
-                        <div className={`text-lg font-bold ${isToday ? 'text-primary-500 dark:text-primary-400' : 'text-slate-700 dark:text-white'}`}>
+                      <div key={idx} className={`p-2 sm:p-4 text-center border-r border-slate-200 dark:border-white/5 last:border-r-0 ${holiday ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                        <div className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
+                        <div className={`text-base sm:text-lg font-bold ${isToday ? 'text-primary-500 dark:text-primary-400' : 'text-slate-700 dark:text-white'}`}>
                           {date.getDate()}
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-[9px] sm:text-[10px] text-slate-500">
                           {date.toLocaleDateString('en-US', { month: 'short' })}
                         </div>
                         {holiday && (
@@ -479,9 +486,9 @@ export default function UserDashboard() {
 
                 {/* user rows */}
                 {users.length > 0 ? users.map(user => (
-                  <div key={user.id} className="grid grid-cols-8 border-b border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                  <div key={user.id} className="grid grid-cols-[180px_repeat(7,1fr)] sm:grid-cols-[220px_repeat(7,1fr)] border-b border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
                     {/* user info */}
-                    <div className="p-4 border-r border-slate-200 dark:border-white/5 flex items-center gap-3">
+                    <div className="sticky left-0 z-10 p-4 border-r border-slate-200 dark:border-white/5 flex items-center gap-3 bg-white dark:bg-dark-card shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center flex-shrink-0">
                         {user.photoURL ? (
                           <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />

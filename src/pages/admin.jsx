@@ -15,7 +15,8 @@ import {
   XCircleIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  GlobeAmericasIcon
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
@@ -51,6 +52,11 @@ export default function Admin() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+  // Holidays
+  const [holidays, setHolidays] = useState([]);
+  const [newHolidayName, setNewHolidayName] = useState("");
+  const [newHolidayDate, setNewHolidayDate] = useState("");
+
   // Notifications
   const [notifications, setNotifications] = useState([]);
 
@@ -60,6 +66,7 @@ export default function Admin() {
     loadOrgs();
     loadLeaves();
     loadNotifications();
+    loadHolidays();
   }, []);
 
   // Auto-update leave type when category changes
@@ -104,6 +111,15 @@ export default function Admin() {
       setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch {
       toast.error("Failed to load notifications");
+    }
+  }
+
+  async function loadHolidays() {
+    try {
+      const snapshot = await getDocs(collection(db, "publicHolidays"));
+      setHolidays(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date)));
+    } catch {
+      toast.error("Failed to load holidays");
     }
   }
 
@@ -314,6 +330,35 @@ export default function Admin() {
     }
   }
 
+  // ----- Holidays -----
+  async function addHoliday() {
+    if (!newHolidayName || !newHolidayDate) return toast.error("Enter name & date");
+    try {
+      const docRef = await addDoc(collection(db, "publicHolidays"), {
+        name: newHolidayName,
+        date: newHolidayDate,
+        createdAt: ts()
+      });
+      setHolidays(prev => [...prev, { id: docRef.id, name: newHolidayName, date: newHolidayDate }].sort((a, b) => a.date.localeCompare(b.date)));
+      setNewHolidayName("");
+      setNewHolidayDate("");
+      toast.success("Holiday added");
+    } catch {
+      toast.error("Failed to add holiday");
+    }
+  }
+
+  async function deleteHoliday(id) {
+    if (!window.confirm("Make this a normal working day?")) return;
+    try {
+      await deleteDoc(doc(db, "publicHolidays", id));
+      setHolidays(prev => prev.filter(h => h.id !== id));
+      toast.success("Holiday removed");
+    } catch {
+      toast.error("Failed to remove holiday");
+    }
+  }
+
   const remainingLeaves = selectedUser ? getRemainingLeaves(selectedUser) : "-";
 
   const SidebarItem = ({ id, icon: Icon, label }) => (
@@ -327,8 +372,8 @@ export default function Admin() {
         : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
         }`}
     >
-      <Icon className="h-5 w-5" />
-      <span className="font-medium">{label}</span>
+      <Icon className="h-5 w-5 flex-shrink-0" />
+      <span className="font-medium whitespace-nowrap">{label}</span>
     </button>
   );
 
@@ -360,7 +405,7 @@ export default function Admin() {
       {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-white dark:bg-dark-card border-r border-slate-200 dark:border-white/5 p-6 flex flex-col
+        w-72 bg-white dark:bg-dark-card border-r border-slate-200 dark:border-white/5 p-6 flex flex-col
         transform transition-transform duration-300 ease-in-out
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
@@ -379,7 +424,7 @@ export default function Admin() {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <SidebarItem id="usersOrgs" style={{ fontSize: "1.5rem" }} icon={UsersIcon} label="Users & Organizations" />
+          <SidebarItem id="usersOrgs" icon={UsersIcon} label="Users & Organizations" />
           <SidebarItem id="leaveMgmt" icon={CalendarDaysIcon} label="Leave Management" />
           <SidebarItem id="notificationsTab" icon={BellIcon} label="Notifications" />
         </nav>
@@ -456,7 +501,7 @@ export default function Admin() {
                     Organization Management
                   </h2>
                   <div className="space-y-6">
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <input
                         className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
                         placeholder="Organization Name"
@@ -464,7 +509,7 @@ export default function Admin() {
                         onChange={e => setNewOrg(e.target.value)}
                       />
                       <button
-                        className="bg-secondary-600 hover:bg-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20"
+                        className="bg-secondary-600 hover:bg-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20 w-full sm:w-auto"
                         onClick={createOrg}
                       >
                         Add
@@ -561,7 +606,7 @@ export default function Admin() {
                 <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl space-y-6 sm:space-y-8 transition-colors duration-200">
                   <div>
                     <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Leave Allocation</h2>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <select
                         className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         value={selectedUser}
@@ -570,18 +615,20 @@ export default function Admin() {
                         <option value="">Select User</option>
                         {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
-                      <input
-                        className="w-24 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
-                        placeholder="Days"
-                        value={leaveDays}
-                        onChange={e => setLeaveDays(e.target.value)}
-                      />
-                      <button
-                        className="bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
-                        onClick={saveLeaveDays}
-                      >
-                        Save
-                      </button>
+                      <div className="flex gap-3">
+                        <input
+                          className="flex-1 sm:w-24 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
+                          placeholder="Days"
+                          value={leaveDays}
+                          onChange={e => setLeaveDays(e.target.value)}
+                        />
+                        <button
+                          className="flex-1 sm:flex-none bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                          onClick={saveLeaveDays}
+                        >
+                          Save
+                        </button>
+                      </div>
                     </div>
                     {selectedUser && (
                       <div className="mt-4 p-4 bg-slate-100 dark:bg-white/5 rounded-lg flex justify-between items-center">
@@ -775,6 +822,82 @@ export default function Admin() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Holidays Tab */}
+          {tab === "holidays" && (
+            <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+              {/* Add Holiday Card */}
+              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
+                <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
+                  <PlusIcon className="h-5 w-5 text-primary-400" />
+                  Add Public Holiday
+                </h2>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <input
+                    className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
+                    placeholder="Holiday Name (e.g. New Year's Day)"
+                    value={newHolidayName}
+                    onChange={e => setNewHolidayName(e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className="bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
+                    value={newHolidayDate}
+                    onChange={e => setNewHolidayDate(e.target.value)}
+                  />
+                  <button
+                    className="bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20"
+                    onClick={addHoliday}
+                  >
+                    Add Holiday
+                  </button>
+                </div>
+              </div>
+
+              {/* Holidays List */}
+              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
+                <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold">Public Holidays List</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Date</th>
+                        <th className="px-6 py-4 font-medium">Holiday Name</th>
+                        <th className="px-6 py-4 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-white/5">
+                      {holidays.length === 0 ? (
+                        <tr>
+                          <td colSpan="3" className="px-6 py-8 text-center text-slate-500">
+                            No public holidays defined
+                          </td>
+                        </tr>
+                      ) : (
+                        holidays.map(h => (
+                          <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4 font-medium">{h.date}</td>
+                            <td className="px-6 py-4 text-slate-500 dark:text-slate-300">{h.name}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                className="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-2 rounded-lg transition-all"
+                                onClick={() => deleteHoliday(h.id)}
+                                title="Make normal working day"
+                              >
+                                <TrashIcon className="h-5 w-5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
