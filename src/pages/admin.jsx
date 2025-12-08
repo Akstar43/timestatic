@@ -622,6 +622,7 @@ export default function Admin() {
                           value={leaveDays}
                           onChange={e => setLeaveDays(e.target.value)}
                         />
+                        <br></br>
                         <button
                           className="flex-1 sm:flex-none bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
                           onClick={saveLeaveDays}
