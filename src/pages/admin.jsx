@@ -18,6 +18,7 @@ import {
   XMarkIcon
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -323,7 +324,7 @@ export default function Admin() {
       }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${tab === id
         ? "bg-primary-500 text-white shadow-lg shadow-primary-500/30"
-        : "text-slate-400 hover:bg-white/5 hover:text-white"
+        : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
         }`}
     >
       <Icon className="h-5 w-5" />
@@ -332,7 +333,7 @@ export default function Admin() {
   );
 
   return (
-    <div className="flex h-screen bg-dark-bg text-dark-text overflow-hidden font-sans">
+    <div className="flex h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-dark-text overflow-hidden font-sans transition-colors duration-200">
       <Toaster position="top-right" toastOptions={{
         style: {
           background: '#1e293b',
@@ -343,7 +344,7 @@ export default function Admin() {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setMobileMenuOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-dark-card border border-white/10 rounded-lg text-white hover:bg-white/5 transition-colors"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white dark:bg-dark-card border border-slate-200 dark:border-white/10 rounded-lg text-slate-500 dark:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
       >
         <Bars3Icon className="h-6 w-6" />
       </button>
@@ -359,7 +360,7 @@ export default function Admin() {
       {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-dark-card border-r border-white/5 p-6 flex flex-col
+        w-64 bg-white dark:bg-dark-card border-r border-slate-200 dark:border-white/5 p-6 flex flex-col
         transform transition-transform duration-300 ease-in-out
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
@@ -378,15 +379,18 @@ export default function Admin() {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <SidebarItem id="usersOrgs" icon={UsersIcon} label="Users & Organizations" />
+          <SidebarItem id="usersOrgs" style={{ fontSize: "1.5rem" }} icon={UsersIcon} label="Users & Organizations" />
           <SidebarItem id="leaveMgmt" icon={CalendarDaysIcon} label="Leave Management" />
           <SidebarItem id="notificationsTab" icon={BellIcon} label="Notifications" />
         </nav>
 
-        <div className="mt-auto pt-6 border-t border-white/5">
+        <div className="mt-auto pt-6 border-t border-slate-200 dark:border-white/5 space-y-2">
+          <div className="flex justify-start px-4">
+            <ThemeToggle />
+          </div>
           <button
             onClick={() => navigate('/login')}
-            className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-red-400 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />
             <span className="font-medium">Logout</span>
@@ -403,7 +407,7 @@ export default function Admin() {
             <div className="space-y-4 sm:space-y-6 lg:space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                 {/* Create User Card */}
-                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl">
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
                     <PlusIcon className="h-5 w-5 text-primary-400" />
                     Create New User
@@ -411,13 +415,13 @@ export default function Admin() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <input
-                        className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         placeholder="Full Name"
                         value={newUserName}
                         onChange={e => setNewUserName(e.target.value)}
                       />
                       <input
-                        className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         placeholder="Email Address"
                         value={newUserEmail}
                         onChange={e => setNewUserEmail(e.target.value)}
@@ -425,7 +429,7 @@ export default function Admin() {
                     </div>
                     <div>
                       <select
-                        className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         value={newUserRole}
                         onChange={e => setNewUserRole(e.target.value)}
                       >
@@ -433,7 +437,7 @@ export default function Admin() {
                         <option value="admin">Admin</option>
                       </select>
                     </div>
-                    <p className="text-xs text-slate-400 italic">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 italic">
                       Users will sign in using their Google account
                     </p>
                     <button
@@ -446,7 +450,7 @@ export default function Admin() {
                 </div>
 
                 {/* Create Org Card */}
-                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl">
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
                     <BuildingOfficeIcon className="h-5 w-5 text-secondary-400" />
                     Organization Management
@@ -454,7 +458,7 @@ export default function Admin() {
                   <div className="space-y-6">
                     <div className="flex gap-3">
                       <input
-                        className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all"
+                        className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
                         placeholder="Organization Name"
                         value={newOrg}
                         onChange={e => setNewOrg(e.target.value)}
@@ -467,11 +471,11 @@ export default function Admin() {
                       </button>
                     </div>
 
-                    <div className="border-t border-white/5 pt-6">
-                      <h3 className="text-sm font-medium text-slate-400 mb-4">Assign User to Organization</h3>
+                    <div className="border-t border-slate-200 dark:border-white/5 pt-6">
+                      <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Assign User to Organization</h3>
                       <div className="flex flex-col sm:flex-row gap-3">
                         <select
-                          className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all"
+                          className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
                           value={selectedUser}
                           onChange={e => setSelectedUser(e.target.value)}
                         >
@@ -479,7 +483,7 @@ export default function Admin() {
                           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                         </select>
                         <select
-                          className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all"
+                          className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
                           value={selectedOrg}
                           onChange={e => setSelectedOrg(e.target.value)}
                         >
@@ -499,13 +503,13 @@ export default function Admin() {
               </div>
 
               {/* Users Table */}
-              <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-                <div className="p-4 sm:p-6 border-b border-white/5">
+              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
+                <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold">User Directory</h2>
                 </div>
                 <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-white/5 text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
+                    <thead className="bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Name</th>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Email</th>
@@ -515,18 +519,18 @@ export default function Admin() {
                         <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                       {users.map(u => (
-                        <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                        <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                           <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">{u.name || "-"}</td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400 max-w-[150px] truncate">{u.email}</td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 max-w-[150px] truncate">{u.email}</td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <span className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
                               }`}>
                               {u.role}
                             </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400 hidden md:table-cell">{u.organizationName || "-"}</td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 hidden md:table-cell">{u.organizationName || "-"}</td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 text-center whitespace-nowrap">
                             <span className="text-emerald-400 font-bold">{getRemainingLeaves(u.id)}</span>
                             <span className="text-slate-500 text-xs ml-1">/ {u.leaveDaysAssigned || 0}</span>
@@ -554,12 +558,12 @@ export default function Admin() {
             <div className="space-y-4 sm:space-y-6 lg:space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
                 {/* Configuration Card */}
-                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl space-y-6 sm:space-y-8">
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl space-y-6 sm:space-y-8 transition-colors duration-200">
                   <div>
                     <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Leave Allocation</h2>
                     <div className="flex gap-3">
                       <select
-                        className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         value={selectedUser}
                         onChange={e => setSelectedUser(e.target.value)}
                       >
@@ -567,7 +571,7 @@ export default function Admin() {
                         {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
                       <input
-                        className="w-24 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="w-24 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         placeholder="Days"
                         value={leaveDays}
                         onChange={e => setLeaveDays(e.target.value)}
@@ -580,22 +584,22 @@ export default function Admin() {
                       </button>
                     </div>
                     {selectedUser && (
-                      <div className="mt-4 p-4 bg-white/5 rounded-lg flex justify-between items-center">
-                        <span className="text-slate-400">Current Balance</span>
-                        <span className="text-xl font-bold text-emerald-400">{remainingLeaves} Days</span>
+                      <div className="mt-4 p-4 bg-slate-100 dark:bg-white/5 rounded-lg flex justify-between items-center">
+                        <span className="text-slate-500 dark:text-slate-400">Current Balance</span>
+                        <span className="text-xl font-bold text-emerald-500 dark:text-emerald-400">{remainingLeaves} Days</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="border-t border-white/5 pt-6 sm:pt-8">
+                  <div className="border-t border-slate-200 dark:border-white/5 pt-6 sm:pt-8">
                     <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Working Days</h2>
                     <div className="flex flex-wrap gap-3 mb-6">
                       {WEEK.map(day => (
                         <label key={day} className={`
                           cursor-pointer px-3 py-2 rounded-lg border transition-all select-none
                           ${workingDays.includes(day)
-                            ? 'bg-primary-500/20 border-primary-500 text-primary-300'
-                            : 'bg-dark-bg border-white/10 text-slate-400 hover:border-white/30'}
+                            ? 'bg-primary-500/20 border-primary-500 text-primary-500 dark:text-primary-300'
+                            : 'bg-slate-50 dark:bg-dark-bg border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-white/30'}
                         `}>
                           <input
                             type="checkbox"
@@ -617,11 +621,11 @@ export default function Admin() {
                 </div>
 
                 {/* Book Leave Card */}
-                <div className="bg-dark-card border border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl">
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Book Leave</h2>
                   <div className="space-y-4">
                     <select
-                      className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                      className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                       value={selectedUser}
                       onChange={e => setSelectedUser(e.target.value)}
                     >
@@ -631,19 +635,19 @@ export default function Admin() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1 ml-1">From</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1 ml-1">From</label>
                         <input
                           type="date"
-                          className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                          className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                           value={from}
                           onChange={e => setFrom(e.target.value)}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1 ml-1">To</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1 ml-1">To</label>
                         <input
                           type="date"
-                          className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                          className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                           value={to}
                           onChange={e => setTo(e.target.value)}
                         />
@@ -652,7 +656,7 @@ export default function Admin() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <select
-                        className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         value={leaveType}
                         onChange={e => setLeaveType(e.target.value)}
                       >
@@ -660,7 +664,7 @@ export default function Admin() {
                         <option value="Non-Deductable">Non-Deductable</option>
                       </select>
                       <select
-                        className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         value={leaveCategory}
                         onChange={e => setLeaveCategory(e.target.value)}
                       >
@@ -673,9 +677,9 @@ export default function Admin() {
                     </div>
 
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1 ml-1">Time Period</label>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1 ml-1">Time Period</label>
                       <select
-                        className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                         value={timePeriod}
                         onChange={e => setTimePeriod(e.target.value)}
                       >
@@ -686,7 +690,7 @@ export default function Admin() {
                     </div>
 
                     <textarea
-                      className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all h-24 resize-none"
+                      className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all h-24 resize-none text-slate-900 dark:text-white"
                       placeholder="Reason for leave..."
                       value={reason}
                       onChange={e => setReason(e.target.value)}
@@ -703,8 +707,8 @@ export default function Admin() {
               </div>
 
               {/* Requests Table */}
-              <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-                <div className="p-4 sm:p-6 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
+                <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold">Leave Requests</h2>
                   <button
                     className="text-red-400 hover:text-red-300 text-sm font-medium hover:underline"
@@ -715,7 +719,7 @@ export default function Admin() {
                 </div>
                 <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-white/5 text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
+                    <thead className="bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">User</th>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">Dates</th>
@@ -724,21 +728,21 @@ export default function Admin() {
                         <th className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                       {leaveRequests.map(l => (
-                        <tr key={l.id} className="hover:bg-white/5 transition-colors">
+                        <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                           <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap">{l.userName}</td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400">
                             <div className="flex flex-col text-xs sm:text-sm">
                               <span>{l.from}</span>
-                              <span className="text-slate-600">to</span>
+                              <span className="text-slate-400 dark:text-slate-600">to</span>
                               <span>{l.to}</span>
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
                             <div className="flex flex-col gap-1">
                               <span className="text-sm font-medium">{l.category}</span>
-                              <span className="text-xs text-slate-500">{LEAVE_CATEGORIES[l.category]?.type || l.type}</span>
+                              <span className="text-xs text-slate-500 dark:text-slate-500">{LEAVE_CATEGORIES[l.category]?.type || l.type}</span>
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
@@ -780,20 +784,20 @@ export default function Admin() {
 
           {/* Notifications Tab */}
           {tab === "notificationsTab" && (
-            <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden max-w-3xl mx-auto">
-              <div className="p-4 sm:p-6 border-b border-white/5">
+            <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden max-w-3xl mx-auto transition-colors duration-200">
+              <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5">
                 <h2 className="text-lg sm:text-xl font-heading font-semibold">Notifications</h2>
               </div>
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-slate-200 dark:divide-white/5">
                 {notifications.length === 0 && (
                   <li className="p-6 sm:p-8 text-center text-slate-500">No notifications yet</li>
                 )}
                 {notifications.map(n => (
-                  <li key={n.id} className={`p-4 sm:p-6 transition-colors ${n.read ? 'bg-transparent' : 'bg-primary-500/5'}`}>
+                  <li key={n.id} className={`p-4 sm:p-6 transition-colors ${n.read ? 'bg-transparent' : 'bg-primary-50 dark:bg-primary-500/5'}`}>
                     <div className="flex justify-between items-start gap-3 sm:gap-4">
                       <div className="flex gap-3 sm:gap-4">
-                        <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-600' : 'bg-primary-500'}`} />
-                        <p className={`text-sm sm:text-base ${n.read ? 'text-slate-400' : 'text-white font-medium'}`}>
+                        <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-400 dark:bg-slate-600' : 'bg-primary-500'}`} />
+                        <p className={`text-sm sm:text-base ${n.read ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white font-medium'}`}>
                           {n.message}
                         </p>
                       </div>

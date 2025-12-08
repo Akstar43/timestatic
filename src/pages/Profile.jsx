@@ -15,6 +15,7 @@ import {
     CheckCircleIcon
 } from "@heroicons/react/24/outline";
 import toast, { Toaster } from "react-hot-toast";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function Profile() {
     const auth = getAuth();
@@ -143,7 +144,7 @@ export default function Profile() {
     const stats = getLeaveStats();
 
     return (
-        <div className="min-h-screen bg-dark-bg text-dark-text font-sans">
+        <div className="min-h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-dark-text font-sans transition-colors duration-200">
             <Toaster position="top-right" toastOptions={{
                 style: {
                     background: '#1e293b',
@@ -152,12 +153,12 @@ export default function Profile() {
             }} />
 
             {/* Header */}
-            <header className="bg-dark-card border-b border-white/5 px-8 py-4 sticky top-0 z-50 backdrop-blur-md bg-dark-card/80">
+            <header className="bg-white dark:bg-dark-card border-b border-slate-200 dark:border-white/5 px-8 py-4 sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-dark-card/80 transition-colors duration-200">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => navigate('/user-dashboard')}
-                            className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-white"
+                            className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                         >
                             <ArrowLeftIcon className="h-5 w-5" />
                         </button>
@@ -165,12 +166,13 @@ export default function Profile() {
                             My Profile
                         </h1>
                     </div>
+                    <ThemeToggle />
                 </div>
             </header>
 
             <main className="max-w-5xl mx-auto p-8 space-y-8 animate-fade-in">
                 {/* Profile Card */}
-                <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
                     {/* Cover Image */}
                     <div className="h-32 bg-gradient-to-r from-primary-600 via-secondary-600 to-primary-600"></div>
 
@@ -179,7 +181,7 @@ export default function Profile() {
                         <div className="flex flex-col md:flex-row gap-6 -mt-16 mb-6">
                             {/* Profile Picture */}
                             <div className="relative">
-                                <div className="w-32 h-32 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center border-4 border-dark-card shadow-xl">
+                                <div className="w-32 h-32 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center border-4 border-white dark:border-dark-card shadow-xl transition-all duration-200">
                                     {photoURL ? (
                                         <img src={photoURL} alt="Profile" className="w-full h-full object-cover" />
                                     ) : (
@@ -208,15 +210,15 @@ export default function Profile() {
                                 {!isEditing ? (
                                     <div className="space-y-4">
                                         <div>
-                                            <h2 className="text-3xl font-heading font-bold text-white">{name || "User"}</h2>
-                                            <p className="text-slate-400 mt-1">{email}</p>
+                                            <h2 className="text-3xl font-heading font-bold text-slate-900 dark:text-white">{name || "User"}</h2>
+                                            <p className="text-slate-500 dark:text-slate-400 mt-1">{email}</p>
                                         </div>
                                         <div className="flex flex-wrap gap-4">
-                                            <div className="flex items-center gap-2 text-slate-300">
+                                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                                 <BuildingOfficeIcon className="h-5 w-5 text-slate-400" />
                                                 <span>{organization || "No organization"}</span>
                                             </div>
-                                            <div className="flex items-center gap-2 text-slate-300">
+                                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                                 <CalendarDaysIcon className="h-5 w-5 text-slate-400" />
                                                 <span>{stats.remaining} days remaining</span>
                                             </div>
@@ -231,30 +233,30 @@ export default function Profile() {
                                 ) : (
                                     <div className="space-y-4">
                                         <div className="space-y-2">
-                                            <label className="text-sm text-slate-400 ml-1">Full Name</label>
+                                            <label className="text-sm text-slate-500 dark:text-slate-400 ml-1">Full Name</label>
                                             <input
                                                 type="text"
                                                 value={name}
                                                 onChange={(e) => setName(e.target.value)}
-                                                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                                                className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-sm text-slate-400 ml-1">Email (Read-only)</label>
+                                            <label className="text-sm text-slate-500 dark:text-slate-400 ml-1">Email (Read-only)</label>
                                             <input
                                                 type="email"
                                                 value={email}
                                                 disabled
-                                                className="w-full bg-dark-bg/50 border border-white/10 rounded-lg px-4 py-2.5 text-slate-500 cursor-not-allowed"
+                                                className="w-full bg-slate-100 dark:bg-dark-bg/50 border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 text-slate-500 cursor-not-allowed"
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-sm text-slate-400 ml-1">Organization (Read-only)</label>
+                                            <label className="text-sm text-slate-500 dark:text-slate-400 ml-1">Organization (Read-only)</label>
                                             <input
                                                 type="text"
                                                 value={organization}
                                                 disabled
-                                                className="w-full bg-dark-bg/50 border border-white/10 rounded-lg px-4 py-2.5 text-slate-500 cursor-not-allowed"
+                                                className="w-full bg-slate-100 dark:bg-dark-bg/50 border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 text-slate-500 cursor-not-allowed"
                                             />
                                         </div>
                                         <div className="flex gap-3 mt-6">
@@ -323,13 +325,13 @@ export default function Profile() {
                 </div>
 
                 {/* Recent Leave Requests */}
-                <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-                    <div className="p-6 border-b border-white/5">
-                        <h2 className="text-xl font-heading font-semibold">Recent Leave Requests</h2>
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
+                    <div className="p-6 border-b border-slate-200 dark:border-white/5">
+                        <h2 className="text-xl font-heading font-semibold text-slate-900 dark:text-white">Recent Leave Requests</h2>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
-                            <thead className="bg-white/5 text-slate-400 text-sm uppercase tracking-wider">
+                            <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider">
                                 <tr>
                                     <th className="px-6 py-4 font-medium">Dates</th>
                                     <th className="px-6 py-4 font-medium">Type</th>
@@ -338,7 +340,7 @@ export default function Profile() {
                                     <th className="px-6 py-4 font-medium">Status</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5">
+                            <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                                 {leaves.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
@@ -347,28 +349,28 @@ export default function Profile() {
                                     </tr>
                                 ) : (
                                     leaves.slice(0, 10).map(leave => (
-                                        <tr key={leave.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="px-6 py-4 text-slate-400">
+                                        <tr key={leave.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                                                 <div className="flex flex-col text-sm">
                                                     <span>{new Date(leave.from).toLocaleDateString()}</span>
-                                                    <span className="text-slate-600">to</span>
+                                                    <span className="text-slate-400 dark:text-slate-600">to</span>
                                                     <span>{new Date(leave.to).toLocaleDateString()}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${leave.type === 'Deductable'
-                                                        ? 'bg-orange-500/20 text-orange-300'
-                                                        : 'bg-blue-500/20 text-blue-300'
+                                                    ? 'bg-orange-500/20 text-orange-600 dark:text-orange-300'
+                                                    : 'bg-blue-500/20 text-blue-600 dark:text-blue-300'
                                                     }`}>
                                                     {leave.type}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-slate-300">{leave.category}</td>
-                                            <td className="px-6 py-4 text-slate-400 max-w-xs truncate">{leave.reason || "-"}</td>
+                                            <td className="px-6 py-4 text-slate-700 dark:text-slate-300">{leave.category}</td>
+                                            <td className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-xs truncate">{leave.reason || "-"}</td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${leave.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' :
-                                                        leave.status === 'Rejected' ? 'bg-red-500/20 text-red-300' :
-                                                            'bg-amber-500/20 text-amber-300'
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${leave.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300' :
+                                                    leave.status === 'Rejected' ? 'bg-red-500/20 text-red-600 dark:text-red-300' :
+                                                        'bg-amber-500/20 text-amber-600 dark:text-amber-300'
                                                     }`}>
                                                     {leave.status}
                                                 </span>

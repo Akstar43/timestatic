@@ -14,6 +14,7 @@ import {
   ChevronRightIcon,
   PlusCircleIcon
 } from "@heroicons/react/24/outline";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function UserDashboard() {
   const auth = getAuth();
@@ -33,6 +34,26 @@ export default function UserDashboard() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
 
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  // Simple hardcoded holidays for demo purposes
+  const HOLIDAYS = {
+    "2025-12-25": "Christmas Day",
+    "2025-12-26": "Boxing Day",
+    "2026-01-01": "New Year's Day",
+    "2026-04-10": "Good Friday",
+    "2026-04-13": "Easter Monday",
+    "2026-05-01": "Early May Bank Holiday",
+    "2026-05-29": "Spring Bank Holiday",
+    "2026-08-28": "Summer Bank Holiday",
+    "2026-12-25": "Christmas Day",
+    "2026-12-26": "Boxing Day"
+  };
+
+  const getHoliday = (date) => {
+    const d = new Date(date);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return HOLIDAYS[dateStr];
+  };
 
 
 
@@ -202,7 +223,7 @@ export default function UserDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-bg text-dark-text font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-dark-text font-sans transition-colors duration-200">
       <Toaster position="top-right" toastOptions={{
         style: {
           background: '#1e293b',
@@ -210,14 +231,15 @@ export default function UserDashboard() {
         }
       }} />
       {/* Header */}
-      <header className="bg-dark-card border-b border-white/5 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-dark-card/80">
+      <header className="bg-white dark:bg-dark-card border-b border-slate-200 dark:border-white/5 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-dark-card/80 transition-colors duration-200">
         <h1 className="text-lg sm:text-xl lg:text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
           User Dashboard
         </h1>
         <div className="flex items-center gap-2 sm:gap-4">
+          <ThemeToggle />
           <button
             onClick={() => navigate('/profile')}
-            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">
+            className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
               {currentUserData?.photoURL ? (
                 <img src={currentUserData.photoURL} alt="Profile" className="w-full h-full object-cover" />
@@ -226,13 +248,13 @@ export default function UserDashboard() {
               )}
             </div>
             <div className="text-left hidden md:block">
-              <div className="text-sm font-medium text-white">{currentUserData?.name || 'User'}</div>
-              <div className="text-xs text-slate-400">View Profile</div>
+              <div className="text-sm font-medium text-slate-700 dark:text-white">{currentUserData?.name || 'User'}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">View Profile</div>
             </div>
           </button>
           <button
             onClick={() => navigate('/login')}
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors px-2 sm:px-4 py-2 rounded-lg hover:bg-white/5"
+            className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors px-2 sm:px-4 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />
             <span className="hidden md:inline">Logout</span>
@@ -291,7 +313,7 @@ export default function UserDashboard() {
 
         {/* Leave Booking Card */}
         {isBookingOpen && (
-          <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl p-4 sm:p-6 animate-fade-in">
+          <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl p-4 sm:p-6 animate-fade-in transition-colors duration-200">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
               <div className="p-2 bg-primary-500/10 rounded-lg">
                 <PlusCircleIcon className="h-5 w-5 sm:h-6 sm:w-6 text-primary-400" />
@@ -301,28 +323,28 @@ export default function UserDashboard() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
               <div className="space-y-1">
-                <label className="text-xs text-slate-400 ml-1">From (date)</label>
+                <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">From (date)</label>
                 <input
                   type="date"
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                   value={fromDateStr}
                   onChange={e => setFromDateStr(e.target.value)}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs text-slate-400 ml-1">To (date)</label>
+                <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">To (date)</label>
                 <input
                   type="date"
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                   value={toDateStr}
                   onChange={e => setToDateStr(e.target.value)}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-slate-400 ml-1">Leave Type</label>
+                <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Leave Type</label>
                 <select
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                   value={selectedLeaveType}
                   onChange={e => setSelectedLeaveType(e.target.value)}
                 >
@@ -332,9 +354,9 @@ export default function UserDashboard() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs text-slate-400 ml-1">Leave Category</label>
+                <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Leave Category</label>
                 <select
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                   value={leaveCategory}
                   onChange={e => setLeaveCategory(e.target.value)}
                 >
@@ -347,9 +369,9 @@ export default function UserDashboard() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs text-slate-400 ml-1">Time Period</label>
+                <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Time Period</label>
                 <select
-                  className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                  className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                   value={timePeriod}
                   onChange={e => setTimePeriod(e.target.value)}
                 >
@@ -362,7 +384,7 @@ export default function UserDashboard() {
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end">
               <input
-                className="flex-1 bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
                 placeholder="Reason for leave..."
                 value={reason}
                 onChange={e => setReason(e.target.value)}
@@ -378,22 +400,22 @@ export default function UserDashboard() {
         )}
 
         {/* Weekly Calendar */}
-        <div className="bg-dark-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-          <div className="p-4 sm:p-6 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+        <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
+          <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-secondary-500/10 rounded-lg">
                 <CalendarDaysIcon className="h-5 w-5 sm:h-6 sm:w-6 text-secondary-400" />
               </div>
               <div>
-                <h2 className="text-lg sm:text-xl font-heading font-semibold">Team Leave Calendar</h2>
-                <p className="text-xs text-slate-400 mt-1">
+                <h2 className="text-lg sm:text-xl font-heading font-semibold text-slate-900 dark:text-white">Team Leave Calendar</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Week of {formatDateShort(weekDates[0])} - {formatDateShort(weekDates[6])}
                 </p>
               </div>
             </div>
             <div className="flex gap-2">
               <button
-                className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-white"
+                className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 onClick={prevWeek}
                 title="Previous Week"
               >
@@ -410,13 +432,13 @@ export default function UserDashboard() {
           </div>
 
           {/* Legend */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/5 bg-dark-bg/30">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-bg/30">
             <div className="flex flex-wrap gap-2 sm:gap-3">
-              <span className="text-xs text-slate-400 font-medium mr-2">Leave Types:</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2">Leave Types:</span>
               {Object.entries(LEAVE_CATEGORIES).map(([category, info]) => (
                 <div key={category} className="flex items-center gap-1.5 sm:gap-2">
                   <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${info.color}`}></div>
-                  <span className="text-[10px] sm:text-xs text-slate-300">{category}</span>
+                  <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-300">{category}</span>
                 </div>
               ))}
             </div>
@@ -427,21 +449,29 @@ export default function UserDashboard() {
             <div className="px-4 sm:px-0">
               <div className="min-w-[800px]">
                 {/* header */}
-                <div className="grid grid-cols-8 border-b border-white/5 bg-dark-bg/30">
-                  <div className="p-4 border-r border-white/5">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Team Member</span>
+                <div className="grid grid-cols-8 border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-bg/30">
+                  <div className="p-4 border-r border-slate-200 dark:border-white/5">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">Team Member</span>
                   </div>
                   {weekDates.map((date, idx) => {
                     const isToday = date.toDateString() === new Date().toDateString();
+                    const holiday = getHoliday(date);
                     return (
-                      <div key={idx} className="p-4 text-center border-r border-white/5 last:border-r-0">
-                        <div className="text-xs text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
-                        <div className={`text-lg font-bold ${isToday ? 'text-primary-400' : 'text-white'}`}>
+                      <div key={idx} className={`p-4 text-center border-r border-slate-200 dark:border-white/5 last:border-r-0 ${holiday ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
+                        <div className={`text-lg font-bold ${isToday ? 'text-primary-500 dark:text-primary-400' : 'text-slate-700 dark:text-white'}`}>
                           {date.getDate()}
                         </div>
                         <div className="text-[10px] text-slate-500">
                           {date.toLocaleDateString('en-US', { month: 'short' })}
                         </div>
+                        {holiday && (
+                          <div className="mt-1">
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300 truncate max-w-full" title={holiday}>
+                              {holiday}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -449,9 +479,9 @@ export default function UserDashboard() {
 
                 {/* user rows */}
                 {users.length > 0 ? users.map(user => (
-                  <div key={user.id} className="grid grid-cols-8 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <div key={user.id} className="grid grid-cols-8 border-b border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
                     {/* user info */}
-                    <div className="p-4 border-r border-white/5 flex items-center gap-3">
+                    <div className="p-4 border-r border-slate-200 dark:border-white/5 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center flex-shrink-0">
                         {user.photoURL ? (
                           <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
@@ -460,8 +490,8 @@ export default function UserDashboard() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-white truncate">{user.name || 'Unknown'}</div>
-                        <div className="text-xs text-slate-400 truncate">{user.email || ''}</div>
+                        <div className="text-sm font-medium text-slate-700 dark:text-white truncate">{user.name || 'Unknown'}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email || ''}</div>
                       </div>
                     </div>
 
@@ -469,9 +499,10 @@ export default function UserDashboard() {
                     {weekDates.map((date, dayIdx) => {
                       // find leaves for this user on this date
                       const userLeavesOnDay = leaves.filter(l => l.userId === user.uid && isLeaveOnDate(l, date));
+                      const holiday = getHoliday(date);
 
                       return (
-                        <div key={dayIdx} className="p-2 border-r border-white/5 last:border-r-0 min-h-[80px]">
+                        <div key={dayIdx} className={`p-2 border-r border-slate-200 dark:border-white/5 last:border-r-0 min-h-[80px] ${holiday ? 'bg-red-50/30 dark:bg-red-900/5' : ''}`}>
                           {userLeavesOnDay.length > 0 ? (
                             <div className="space-y-1">
                               {userLeavesOnDay.map(leave => {
@@ -555,7 +586,7 @@ export default function UserDashboard() {
                             </div>
                           ) : (
                             <div className="h-full flex items-center justify-center">
-                              <div className="w-1 h-1 rounded-full bg-slate-700/50"></div>
+                              <div className="w-1 h-1 rounded-full bg-slate-200 dark:bg-slate-700/50"></div>
                             </div>
                           )}
                         </div>
@@ -572,6 +603,6 @@ export default function UserDashboard() {
           </div>
         </div>
       </main>
-    </div>
+    </div >
   );
 }
