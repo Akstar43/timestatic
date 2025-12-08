@@ -615,16 +615,15 @@ export default function Admin() {
                         <option value="">Select User</option>
                         {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
-                      <div className="flex gap-3">
+                      <div className="flex gap-3 flex-wrap">
                         <input
                           className="flex-1 sm:w-24 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
                           placeholder="Days"
                           value={leaveDays}
                           onChange={e => setLeaveDays(e.target.value)}
                         />
-                        <br></br>
                         <button
-                          className="flex-1 sm:flex-none bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                          className="flex flex-wrap bg-primary-600 hover:bg-primary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
                           onClick={saveLeaveDays}
                         >
                           Save
