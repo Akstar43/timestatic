@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { auth, db, ts } from "../firebase/firebase";
 import toast, { Toaster } from "react-hot-toast";
-import { LEAVE_CATEGORIES } from "../config/leaveCategories"; // Import shared categories
+import { LEAVE_CATEGORIES } from "../context/leavetypes"; // Import shared categories
 import {
   UsersIcon,
   BuildingOfficeIcon,
@@ -43,6 +43,7 @@ export default function Admin() {
   const [workingDays, setWorkingDays] = useState([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [timePeriod, setTimePeriod] = useState("Full Day"); // "Full Day" | "Morning" | "Afternoon"
   const [leaveType, setLeaveType] = useState("Deductable");
   const [leaveCategory, setLeaveCategory] = useState("Holiday");
   const [reason, setReason] = useState("");
@@ -59,6 +60,15 @@ export default function Admin() {
     loadLeaves();
     loadNotifications();
   }, []);
+
+  // Auto-update leave type when category changes
+  // When leave type changes, default the category to the first valid option
+  useEffect(() => {
+    const validCategories = Object.keys(LEAVE_CATEGORIES).filter(cat => LEAVE_CATEGORIES[cat].type === leaveType);
+    if (validCategories.length > 0 && (!LEAVE_CATEGORIES[leaveCategory] || LEAVE_CATEGORIES[leaveCategory].type !== leaveType)) {
+      setLeaveCategory(validCategories[0]);
+    }
+  }, [leaveType]);
 
   async function loadUsers() {
     try {
@@ -101,11 +111,15 @@ export default function Admin() {
     const user = users.find(u => u.id === userId);
     if (!user) return 0;
     const usedLeaves = leaveRequests
-      .filter(l => l.userId === userId && l.status === "Approved" && l.type === "Deductable")
+      .filter(l => {
+        const categoryInfo = LEAVE_CATEGORIES[l.category];
+        return l.userId === userId && l.status === "Approved" && categoryInfo?.type === "Deductable";
+      })
       .reduce((sum, l) => {
         const fromDate = new Date(l.from);
         const toDate = new Date(l.to);
-        return sum + (Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1);
+        const days = Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+        return sum + (l.isHalfDay ? 0.5 : days);
       }, 0);
     return (user.leaveDaysAssigned || 0) - usedLeaves;
   }
@@ -255,11 +269,24 @@ export default function Admin() {
   async function bookLeave() {
     if (!selectedUser || !from || !to) return toast.error("Select all fields");
     try {
-      const leave = { userId: selectedUser, userName: users.find(u => u.id === selectedUser)?.name || "", from, to, type: leaveType, category: leaveCategory, reason, status: "Pending", createdAt: ts() };
+      const isHalfDay = timePeriod !== "Full Day";
+      const leave = {
+        userId: selectedUser,
+        userName: users.find(u => u.id === selectedUser)?.name || "",
+        from,
+        to,
+        type: leaveType,
+        category: leaveCategory,
+        reason,
+        status: "Pending",
+        isHalfDay,
+        halfType: isHalfDay ? timePeriod : null,
+        createdAt: ts()
+      };
       const docRef = await addDoc(collection(db, "leaveRequests"), leave);
       setLeaveRequests(prev => [...prev, { ...leave, id: docRef.id }]);
       await addDoc(collection(db, "notifications"), { type: "leave_request", message: `Leave requested for ${leave.userName}`, read: false, createdAt: ts(), meta: { userId: selectedUser } });
-      setFrom(""); setTo(""); setReason(""); setLeaveType("Deductable"); setLeaveCategory("Holiday");
+      setFrom(""); setTo(""); setReason(""); setLeaveType("Deductable"); setLeaveCategory("Holiday"); setTimePeriod("Full Day");
       toast.success("Leave booked");
     } catch {
       toast.error("Failed to book leave");
@@ -630,16 +657,31 @@ export default function Admin() {
                         onChange={e => setLeaveType(e.target.value)}
                       >
                         <option value="Deductable">Deductable</option>
-                        <option value="Non-deductable">Non-deductable</option>
+                        <option value="Non-Deductable">Non-Deductable</option>
                       </select>
                       <select
                         className="bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
                         value={leaveCategory}
                         onChange={e => setLeaveCategory(e.target.value)}
                       >
-                        <option value="Holiday">Holiday</option>
-                        <option value="Sick">Sick</option>
-                        <option value="Other">Other</option>
+                        {Object.keys(LEAVE_CATEGORIES)
+                          .filter(cat => LEAVE_CATEGORIES[cat].type === leaveType)
+                          .map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1 ml-1">Time Period</label>
+                      <select
+                        className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                        value={timePeriod}
+                        onChange={e => setTimePeriod(e.target.value)}
+                      >
+                        <option value="Full Day">Full Day</option>
+                        <option value="Morning">Start of Day (Morning)</option>
+                        <option value="Afternoon">Afternoon</option>
                       </select>
                     </div>
 
@@ -696,7 +738,7 @@ export default function Admin() {
                           <td className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
                             <div className="flex flex-col gap-1">
                               <span className="text-sm font-medium">{l.category}</span>
-                              <span className="text-xs text-slate-500">{l.type}</span>
+                              <span className="text-xs text-slate-500">{LEAVE_CATEGORIES[l.category]?.type || l.type}</span>
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
