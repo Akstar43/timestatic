@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { auth, db, ts } from "../firebase/firebase";
 import toast, { Toaster } from "react-hot-toast";
+import { LEAVE_CATEGORIES } from "../config/leaveCategories"; // Import shared categories
 import {
   UsersIcon,
   BuildingOfficeIcon,

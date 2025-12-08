@@ -4,6 +4,7 @@ import { collection, getDocs, addDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { db, ts } from "../firebase/firebase";
 import { useNavigate } from "react-router-dom";
+import { LEAVE_CATEGORIES } from "../config/leaveCategories"; // Shared categories
 import {
   CalendarDaysIcon,
   ClockIcon,
@@ -23,29 +24,14 @@ export default function UserDashboard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [leaveCategory, setLeaveCategory] = useState("Holiday");
+  const [timePeriod, setTimePeriod] = useState("Full Day"); // New state
   const [reason, setReason] = useState("");
-  const [isHalfDay, setIsHalfDay] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState(getMonday(new Date()));
   const [currentUserData, setCurrentUserData] = useState(null);
 
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  // Define leave categories with their types and colors
-  const LEAVE_CATEGORIES = {
-    // Deductable
-    'Holiday': { type: 'Deductable', color: 'bg-purple-500' },
-    'Doctor Appointment': { type: 'Deductable', color: 'bg-cyan-500' },
-
-    // Non-deductable
-    'Sick Leave': { type: 'Non-Deductable', color: 'bg-green-500' },
-    'Maternity': { type: 'Non-Deductable', color: 'bg-purple-600' },
-    'Paternity': { type: 'Non-Deductable', color: 'bg-purple-600' },
-    'Meeting': { type: 'Non-Deductable', color: 'bg-orange-500' },
-    'Compassionate': { type: 'Non-Deductable', color: 'bg-yellow-500' },
-    'Public Holiday': { type: 'Non-Deductable', color: 'bg-amber-700' },
-    'Festive Holiday': { type: 'Non-Deductable', color: 'bg-red-500' },
-    'Working from Home': { type: 'Non-Deductable', color: 'bg-blue-900' }
-  };
+  // REMOVED: Local LEAVE_CATEGORIES definition
 
   useEffect(() => {
     loadUsers();
@@ -92,8 +78,9 @@ export default function UserDashboard() {
       .reduce((sum, l) => {
         const fromDate = new Date(l.from);
         const toDate = new Date(l.to);
-        const days = Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
-        // If it's a half day, count as 0.5, otherwise count full days
+        const days = Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1; // Approx days
+        // Note: This logic might need refinement if we have complex timestamps now.
+        // But for now, if isHalfDay is true, add 0.5, else add diff days.
         return sum + (l.isHalfDay ? 0.5 : days);
       }, 0);
 
@@ -128,13 +115,35 @@ export default function UserDashboard() {
     if (!currentUserId) return alert("User not found, login again.");
     if (!from || !to) return alert("Select leave dates");
 
+    // Calculate actual datetime strings based on Time Period logic
+    let fromDate = new Date(from);
+    let toDate = new Date(to);
+
+    if (timePeriod === "Morning") {
+      fromDate.setHours(9, 0, 0, 0);
+      toDate.setHours(13, 0, 0, 0);
+    } else if (timePeriod === "Afternoon") {
+      fromDate.setHours(13, 0, 0, 0);
+      toDate.setHours(17, 0, 0, 0);
+    } else {
+      // Full Day
+      fromDate.setHours(9, 0, 0, 0);
+      toDate.setHours(17, 0, 0, 0);
+    }
+
     const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
+    const isHalfDay = timePeriod !== "Full Day";
+
+    const formatDateTime = (date) => {
+      const pad = (num) => num.toString().padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
 
     const leave = {
       userId: currentUserId,
       userName: users.find(u => u.uid === currentUserId)?.name || "Unknown User",
-      from,
-      to,
+      from: formatDateTime(fromDate),
+      to: formatDateTime(toDate),
       type: categoryInfo.type,
       category: leaveCategory,
       reason,
@@ -148,7 +157,7 @@ export default function UserDashboard() {
         alert("Leave request submitted");
         setFrom(""); setTo(""); setReason("");
         setLeaveCategory("Holiday");
-        setIsHalfDay(false);
+        setTimePeriod("Full Day");
         loadLeaves();
       });
   }
@@ -238,16 +247,19 @@ export default function UserDashboard() {
             <div className="space-y-1">
               <label className="text-xs text-slate-400 ml-1">From</label>
               <input
-                type="datetime-local"
+                type="date"
                 className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
                 value={from}
-                onChange={e => setFrom(e.target.value)}
+                onChange={e => {
+                  setFrom(e.target.value);
+                  if (!to) setTo(e.target.value);
+                }}
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-slate-400 ml-1">To</label>
               <input
-                type="datetime-local"
+                type="date"
                 className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
                 value={to}
                 onChange={e => setTo(e.target.value)}
@@ -267,6 +279,18 @@ export default function UserDashboard() {
                 ))}
               </select>
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 ml-1">Time Period</label>
+              <select
+                className="w-full bg-dark-bg border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm"
+                value={timePeriod}
+                onChange={e => setTimePeriod(e.target.value)}
+              >
+                <option value="Full Day">Full Day</option>
+                <option value="Morning">Start of Day (Morning)</option>
+                <option value="Afternoon">Afternoon</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end">
@@ -276,15 +300,7 @@ export default function UserDashboard() {
               value={reason}
               onChange={e => setReason(e.target.value)}
             />
-            <label className="flex items-center gap-2 px-4 py-2.5 bg-dark-bg border border-white/10 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-              <input
-                type="checkbox"
-                checked={isHalfDay}
-                onChange={e => setIsHalfDay(e.target.checked)}
-                className="w-4 h-4 rounded border-white/10 bg-dark-bg text-primary-600 focus:ring-2 focus:ring-primary-500"
-              />
-              <span className="text-sm text-slate-300">Half Day</span>
-            </label>
+            {/* REMOVED: Half Day Checkbox - Now replaced by Time Period Select */}
             <button
               className="bg-primary-600 hover:bg-primary-500 text-white px-6 sm:px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20 w-full sm:w-auto"
               onClick={bookLeave}
