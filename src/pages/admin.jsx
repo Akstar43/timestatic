@@ -373,7 +373,7 @@ export default function Admin() {
         }`}
     >
       <Icon className="h-5 w-5 flex-shrink-0" />
-      <span className="font-medium whitespace-nowrap">{label}</span>
+      <span className="font-medium text-sm whitespace-nowrap">{label}</span>
     </button>
   );
 
@@ -444,7 +444,7 @@ export default function Admin() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
+      <main className="flex-1 w-full max-w-full overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
         <div className="max-w-7xl mx-auto animate-fade-in">
 
           {/* Users & Orgs Tab */}
