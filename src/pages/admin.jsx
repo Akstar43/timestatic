@@ -20,6 +20,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
+import { sendLeaveStatusEmail, sendWelcomeEmail } from "../services/emailService";
+import { EMAILJS_CONFIG } from "../config/emailConfig";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -209,6 +211,16 @@ export default function Admin() {
         photoURL: ""
       }]);
 
+      // Send Welcome Email
+      sendWelcomeEmail(newUserEmail, newUserName).then(result => {
+        if (result && result.success) {
+          toast.success("Welcome email sent");
+        } else {
+          console.error("Welcome email failed:", result?.error);
+          toast.error("Welcome email failed");
+        }
+      });
+
       // Clear form
       setNewUserEmail("");
       setNewUserName("");
@@ -315,6 +327,24 @@ export default function Admin() {
       await updateDoc(doc(db, "leaveRequests", id), { status, reviewedAt: ts() });
       setLeaveRequests(prev => prev.map(l => l.id === id ? { ...l, status } : l));
       toast.success(`Leave ${status.toLowerCase()}`);
+
+      // Send Email Notification
+      const request = leaveRequests.find(r => r.id === id);
+      const user = users.find(u => u.id === request?.userId);
+
+      if (request && user) {
+        console.log("Attempting to send email to:", user.email);
+        sendLeaveStatusEmail(user.email, user.name, status, request).then(result => {
+          if (result && result.success) {
+            toast.success("Email notification sent");
+          } else {
+            const errorDetails = result?.error || "Unknown error";
+            console.error("Email failed:", errorDetails);
+            const msg = errorDetails.text || "Check console";
+            toast.error(`Email failed: ${msg}`);
+          }
+        });
+      }
     } catch {
       toast.error("Failed to update leave status");
     }
@@ -516,7 +546,7 @@ export default function Admin() {
                       </button>
                     </div>
 
-                    <div className="border-t border-slate-200 dark:border-white/5 pt-6">
+                    <div className="border-t border-slate-200 dark:border-white/5 pt-6 flex-wrap">
                       <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Assign User to Organization</h3>
                       <div className="flex flex-col sm:flex-row gap-3">
                         <select
