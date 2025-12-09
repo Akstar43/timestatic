@@ -7,6 +7,7 @@
 
 export const EMAILJS_CONFIG = {
     SERVICE_ID: "service_754x2vf",   // e.g. "service_xxxxx"
-    TEMPLATE_ID: "template_nqv5gel", // e.g. "template_xxxxx"
+    TEMPLATE_ID: "template_nqv5gel",
+    TEMPLATE_ID1: "template_11cgy1i", // e.g. "template_xxxxx"
     PUBLIC_KEY: "XcrhBMAcXKgv4hRy_"    // e.g. "user_xxxxx" or public key from Account > API Keys
 };

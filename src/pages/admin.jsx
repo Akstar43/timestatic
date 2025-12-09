@@ -18,15 +18,18 @@ import {
   XMarkIcon,
   GlobeAmericasIcon
 } from "@heroicons/react/24/outline";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
 import { sendLeaveStatusEmail, sendWelcomeEmail } from "../services/emailService";
 import { EMAILJS_CONFIG } from "../config/emailConfig";
 
 export default function Admin() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState("usersOrgs");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+
 
   // Users & Orgs
   const [users, setUsers] = useState([]);
@@ -62,6 +65,47 @@ export default function Admin() {
   // Notifications
   const [notifications, setNotifications] = useState([]);
 
+  // Deep Link Action State
+  const [actionModal, setActionModal] = useState(null); // { id, action, userDetails... }
+
+  useEffect(() => {
+    const action = searchParams.get("action");
+    const id = searchParams.get("id");
+
+    if (action && id && leaveRequests.length > 0) {
+      const request = leaveRequests.find(r => r.id === id);
+      if (request && request.status === "Pending") {
+        const user = users.find(u => u.id === request.userId);
+        setActionModal({
+          id,
+          action,
+          request,
+          userName: user?.name || "Unknown User",
+          userEmail: user?.email || ""
+        });
+      } else if (request) {
+        toast.error(`Request already ${request.status}`);
+        setSearchParams({}); // Clear params
+      }
+    }
+  }, [searchParams, leaveRequests, users]);
+
+  const confirmAction = async () => {
+    if (!actionModal) return;
+    const { id, action } = actionModal;
+
+    // Normalize action string (Approved/Rejected -> Approved/Rejected)
+    // Email sends "Approved" or "Rejected" usually, or capitalize
+    const status = action === "Approved" ? "Approved" : action === "Rejected" ? "Rejected" : null;
+
+    if (status) {
+      await setLeaveStatus(id, status);
+      setActionModal(null);
+      setSearchParams({}); // Clear URL
+      toast.success(`Successfully ${status} request via Link`);
+    }
+  };
+
   // ----- Load data -----
   useEffect(() => {
     loadUsers();
@@ -79,7 +123,6 @@ export default function Admin() {
       setLeaveCategory(validCategories[0]);
     }
   }, [leaveType]);
-
   async function loadUsers() {
     try {
       const snapshot = await getDocs(collection(db, "users"));
@@ -297,11 +340,20 @@ export default function Admin() {
   // ----- Book Leave -----
   async function bookLeave() {
     if (!selectedUser || !from || !to) return toast.error("Select all fields");
+
+    const selectedUserObj = users.find(u => u.id === selectedUser);
+    if (!selectedUserObj) return toast.error("Selected user not found");
+
+    const userEmail = selectedUserObj.email || selectedUserObj.userEmail || selectedUserObj.googleId;
+    console.log(userEmail);
+    const userName = selectedUserObj.name || "User";
+
     try {
       const isHalfDay = timePeriod !== "Full Day";
+
       const leave = {
         userId: selectedUser,
-        userName: users.find(u => u.id === selectedUser)?.name || "",
+        userName,
         from,
         to,
         type: leaveType,
@@ -312,15 +364,53 @@ export default function Admin() {
         halfType: isHalfDay ? timePeriod : null,
         createdAt: ts()
       };
+
+      // Save leave to Firestore
       const docRef = await addDoc(collection(db, "leaveRequests"), leave);
+
+      // Update local state
       setLeaveRequests(prev => [...prev, { ...leave, id: docRef.id }]);
-      await addDoc(collection(db, "notifications"), { type: "leave_request", message: `Leave requested for ${leave.userName}`, read: false, createdAt: ts(), meta: { userId: selectedUser } });
-      setFrom(""); setTo(""); setReason(""); setLeaveType("Deductable"); setLeaveCategory("Holiday"); setTimePeriod("Full Day");
-      toast.success("Leave booked");
-    } catch {
+
+      // Add notification
+      await addDoc(collection(db, "notifications"), {
+        type: "leave_request",
+        message: `Leave requested for ${userName}`,
+        read: false,
+        createdAt: ts(),
+        meta: { userId: selectedUser }
+      });
+
+      // Send email only if user has a valid email
+      if (userEmail) {
+        const emailResult = await sendLeaveStatusEmail(userEmail, userName, "Pending", leave);
+        if (!emailResult.success) {
+          console.warn("Email failed to send", emailResult.error);
+        }
+      } else {
+        console.warn("No email for selected user, skipping email notification");
+      }
+
+      // Reset form
+      setFrom("");
+      setTo("");
+      setReason("");
+      setLeaveType("Deductable");
+      setLeaveCategory("Holiday");
+      setTimePeriod("Full Day");
+
+      toast.success("Leave booked successfully");
+
+    } catch (err) {
+      console.error("Failed to book leave:", err);
       toast.error("Failed to book leave");
     }
+    const getCategoryColor = (category) => {
+      return LEAVE_CATEGORIES[category]?.color || 'bg-slate-500';
+    };
+
   }
+
+
 
   async function setLeaveStatus(id, status) {
     try {
@@ -409,6 +499,36 @@ export default function Admin() {
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-dark-text overflow-hidden font-sans transition-colors duration-200">
+
+      {/* Action Confirmation Modal */}
+      {actionModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-dark-card rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-200 dark:border-white/10 animate-fade-in-up">
+            <h3 className="text-xl font-heading font-bold mb-2">Confirm Action</h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
+              Do you want to <strong className={actionModal.action === "Approved" ? "text-emerald-500" : "text-red-500"}>{actionModal.action}</strong> the leave request for <strong>{actionModal.userName}</strong>?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setActionModal(null); setSearchParams({}); }}
+                className="px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAction}
+                className={`px-4 py-2 rounded-lg text-white font-medium shadow-lg transition-transform hover:scale-105 ${actionModal.action === "Approved"
+                  ? "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20"
+                  : "bg-red-500 hover:bg-red-600 shadow-red-500/20"
+                  }`}
+              >
+                Confirm {actionModal.action}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toaster position="top-right" toastOptions={{
         style: {
           background: '#1e293b',

@@ -15,6 +15,7 @@ import {
   PlusCircleIcon
 } from "@heroicons/react/24/outline";
 import ThemeToggle from "../components/ThemeToggle";
+import { sendNewLeaveRequestEmail, sendLeaveStatusEmail } from "../services/emailService";
 
 export default function UserDashboard() {
   const auth = getAuth();
@@ -83,7 +84,8 @@ export default function UserDashboard() {
       const usersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setUsers(usersData);
       if (currentUserId) {
-        setCurrentUserData(usersData.find(u => u.uid === currentUserId) || null);
+        const authUser = auth.currentUser;
+        setCurrentUserData(usersData.find(u => u.uid === currentUserId || (authUser?.email && u.email?.toLowerCase() === authUser.email.toLowerCase())) || null);
       }
     } catch (err) {
       console.error("Error loading users:", err);
@@ -108,7 +110,8 @@ export default function UserDashboard() {
     const used = leaves
       .filter(l => {
         const categoryInfo = LEAVE_CATEGORIES[l.category];
-        return l.userId === currentUserId &&
+        // FIX: Match by Firestore ID (l.userId) against current user's Firestore ID (currentUserData.id)
+        return l.userId === currentUserData.id &&
           l.status === "Approved" &&
           categoryInfo?.type === "Deductable";
       })
@@ -193,9 +196,11 @@ export default function UserDashboard() {
     const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
     const isHalfDay = timePeriod !== "Full Day";
 
+    if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
+
     const leave = {
-      userId: currentUserId,
-      userName: users.find(u => u.uid === currentUserId)?.name || "Unknown User",
+      userId: currentUserData.id, // Standardize on Firestore ID
+      userName: currentUserData.name || "Unknown User",
       from: fromDateStr,
       to: toDateStr,
       type: categoryInfo.type,
@@ -208,12 +213,31 @@ export default function UserDashboard() {
     };
 
     addDoc(collection(db, "leaveRequests"), leave)
-      .then(() => {
+      .then(async (docRef) => {
         toast.success("Leave request submitted successfully");
         setFromDateStr(""); setToDateStr(""); setReason("");
         setLeaveCategory("Holiday");
         setTimePeriod("Full Day");
         setIsBookingOpen(false); // Close form
+
+        const leaveWithId = { ...leave, id: docRef.id };
+
+        // Send Email Notification to Admin
+        const adminEmailResult = await sendNewLeaveRequestEmail(leaveWithId, leave.userName);
+        if (!adminEmailResult.success) {
+          console.warn("Failed to send admin email:", adminEmailResult.error);
+        }
+
+        // Send Confirmation Email to User
+        // Using currentUserData.email if available, otherwise fallback
+        const userEmail = currentUserData?.email;
+        if (userEmail) {
+          const userEmailResult = await sendLeaveStatusEmail(userEmail, leave.userName, "Pending", leave);
+          if (!userEmailResult.success) {
+            console.warn("Failed to send user confirmation email:", userEmailResult.error);
+          }
+        }
+
         loadLeaves();
       })
       .catch((err) => {
@@ -223,7 +247,6 @@ export default function UserDashboard() {
   }
 
   const weekDates = getWeekDates(selectedWeek);
-
   // Get color based on leave category
   const getCategoryColor = (category) => {
     return LEAVE_CATEGORIES[category]?.color || 'bg-slate-500';
@@ -505,7 +528,8 @@ export default function UserDashboard() {
                     {/* day cells */}
                     {weekDates.map((date, dayIdx) => {
                       // find leaves for this user on this date
-                      const userLeavesOnDay = leaves.filter(l => l.userId === user.uid && isLeaveOnDate(l, date));
+                      // FIX: Match by Firestore ID (l.userId) against user.id
+                      const userLeavesOnDay = leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date));
                       const holiday = getHoliday(date);
 
                       return (
