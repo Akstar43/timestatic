@@ -607,7 +607,7 @@ export default function Admin() {
 
         <div className="mb-8 px-2">
           <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
-            Admin Panel
+            Admin Panel (Updated)
           </h1>
         </div>
 
@@ -1098,8 +1098,64 @@ export default function Admin() {
                   </table>
                 </div>
               </div>
+
+              {/* Public Holidays Management */}
+              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
+                <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
+                  <CalendarDaysIcon className="h-5 w-5 text-amber-500" />
+                  Public Holidays
+                </h2>
+
+                {/* Add Holiday Form */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-6 bg-slate-50 dark:bg-dark-bg p-4 rounded-xl border border-slate-200 dark:border-white/5">
+                  <input
+                    className="flex-1 bg-white dark:bg-dark-card border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-slate-900 dark:text-white"
+                    placeholder="Holiday Name (e.g. National Day)"
+                    value={newHolidayName}
+                    onChange={e => setNewHolidayName(e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className="sm:w-48 bg-white dark:bg-dark-card border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-slate-900 dark:text-white"
+                    value={newHolidayDate}
+                    onChange={e => setNewHolidayDate(e.target.value)}
+                  />
+                  <button
+                    className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-amber-600/20"
+                    onClick={addHoliday}
+                  >
+                    Add Holiday
+                  </button>
+                </div>
+
+                {/* Holiday List */}
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                  {holidays.length === 0 ? (
+                    <div className="text-center text-slate-500 py-8 italic">No holidays defined yet.</div>
+                  ) : (
+                    holidays.map(h => (
+                      <div key={h.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-white/5 rounded-lg hover:border-amber-500/30 transition-colors">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                          <span className="font-mono text-sm text-slate-500 dark:text-slate-400 bg-white dark:bg-dark-card px-2 py-1 rounded border border-slate-200 dark:border-white/5">
+                            {h.date}
+                          </span>
+                          <span className="font-medium text-slate-900 dark:text-white">{h.name}</span>
+                        </div>
+                        <button
+                          className="bg-red-50 dark:bg-red-900/10 text-red-500 dark:text-red-400 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                          onClick={() => deleteHoliday(h.id)}
+                          title="Remove Holiday"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           )}
+
 
           {/* Notifications Tab */}
           {tab === "notificationsTab" && (

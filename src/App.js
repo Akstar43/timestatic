@@ -3,7 +3,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Login from "./pages/login";
-import Admin from "./pages/admin";
+import Admin from "./pages/AdminPage";
 import UserDashboard from "./pages/UserDashboard";
 import Profile from "./pages/Profile";
 import SetupAdmin from "./pages/SetupAdmin";

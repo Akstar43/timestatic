@@ -102,6 +102,39 @@ export default function UserDashboard() {
     }
   }
 
+  // Helper: Check if a date is a weekend (Sat/Sun)
+  function isWeekend(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  }
+
+  // Helper: Calculate standard business days (Mon-Fri) excluding Public Holidays
+  function calculateLeaveDuration(fromStr, toStr, isHalfDay = false) {
+    const start = new Date(fromStr);
+    const end = new Date(toStr);
+    let count = 0;
+    let curr = new Date(start);
+
+    while (curr <= end) {
+      const dateStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
+
+      // If it's NOT a weekend AND NOT a holiday
+      if (!isWeekend(curr) && !holidays[dateStr]) {
+        count++;
+      }
+
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    if (count === 0) return 0;
+
+    // If it's a half day request, and we found valid business days, 
+    // strictly speaking a half day is usually 0.5. 
+    // However, if the user selects a weekend for a half day, count should be 0.
+    // If they select a single weekday for half day, count is 1 * 0.5 = 0.5.
+    return isHalfDay ? 0.5 : count;
+  }
+
   // Calculate leave balance for current user
   function getLeaveBalance() {
     if (!currentUserData) return { total: 0, used: 0, remaining: 0 };
@@ -110,17 +143,12 @@ export default function UserDashboard() {
     const used = leaves
       .filter(l => {
         const categoryInfo = LEAVE_CATEGORIES[l.category];
-        // FIX: Match by Firestore ID (l.userId) against current user's Firestore ID (currentUserData.id)
         return l.userId === currentUserData.id &&
           l.status === "Approved" &&
           categoryInfo?.type === "Deductable";
       })
       .reduce((sum, l) => {
-        const fromDate = new Date(l.from);
-        const toDate = new Date(l.to);
-        const days = Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
-        // If it's a half day, count as 0.5, otherwise count full days
-        return sum + (l.isHalfDay ? 0.5 : days);
+        return sum + calculateLeaveDuration(l.from, l.to, l.isHalfDay);
       }, 0);
 
     return { total, used, remaining: total - used };
@@ -189,7 +217,7 @@ export default function UserDashboard() {
     return d >= start && d <= end;
   }
 
-  function bookLeave() {
+  async function bookLeave() {
     if (!currentUserId) return toast.error("User not found, login again.");
     if (!fromDateStr || !toDateStr) return toast.error("Select leave dates");
 
@@ -198,11 +226,12 @@ export default function UserDashboard() {
 
     if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
 
-    // Calculate requested duration
-    const start = new Date(fromDateStr);
-    const end = new Date(toDateStr);
-    const dayDiff = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
-    const requestedDays = isHalfDay ? 0.5 : dayDiff;
+    // Calculate requested duration using business days logic
+    const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isHalfDay);
+
+    if (requestedDays === 0) {
+      return toast.error("Selected dates are non-working days (Weekends/Holidays).");
+    }
 
     // Get current balance
     const { total, used } = getLeaveBalance();
@@ -213,13 +242,11 @@ export default function UserDashboard() {
         const cat = LEAVE_CATEGORIES[l.category];
         return l.userId === currentUserData.id &&
           l.status === "Pending" &&
+          l.id !== "temp" && // Exclude optimistic (if any)
           cat?.type === "Deductable";
       })
       .reduce((sum, l) => {
-        const pStart = new Date(l.from);
-        const pEnd = new Date(l.to);
-        const pDayDiff = Math.floor((pEnd - pStart) / (1000 * 60 * 60 * 24)) + 1;
-        return sum + (l.isHalfDay ? 0.5 : pDayDiff);
+        return sum + calculateLeaveDuration(l.from, l.to, l.isHalfDay);
       }, 0);
 
     const availableBalance = total - used - pendingUsage;
@@ -271,8 +298,7 @@ export default function UserDashboard() {
 
         const leaveWithId = { ...leave, id: docRef.id };
 
-        // Send Email Notification to Admin (Only if NOT auto-rejected, usually admins don't need spam for auto-rejects, OR maybe they do? Let's send it so they know someone tried)
-        // Actually, let's send it.
+        // Send Email Notification to Admin
         const adminEmailResult = await sendNewLeaveRequestEmail(leaveWithId, leave.userName);
         if (!adminEmailResult.success) {
           console.warn("Failed to send admin email:", adminEmailResult.error);
@@ -281,7 +307,6 @@ export default function UserDashboard() {
         // Send Confirmation/Rejection Email to User
         const userEmail = currentUserData?.email;
         if (userEmail) {
-          // Pass the auto-rejection reason if applicable
           const userEmailResult = await sendLeaveStatusEmail(userEmail, leave.userName, status, leave, isAutoRejected ? adminResponse : "");
           if (!userEmailResult.success) {
             console.warn("Failed to send user confirmation email:", userEmailResult.error);
@@ -545,7 +570,7 @@ export default function UserDashboard() {
                     const isToday = date.toDateString() === new Date().toDateString();
                     const holiday = getHoliday(date);
                     return (
-                      <div key={idx} className={`p-2 sm:p-4 text-center border-r border-slate-200 dark:border-white/5 last:border-r-0 ${holiday ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                      <div key={idx} className={`p-2 sm:p-4 text-center border-r border-slate-200 dark:border-white/5 last:border-r-0 ${holiday ? 'bg-slate-200/50 dark:bg-white/5' : ''}`}>
                         <div className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
                         <div className={`text-base sm:text-lg font-bold ${isToday ? 'text-primary-500 dark:text-primary-400' : 'text-slate-700 dark:text-white'}`}>
                           {date.getDate()}
@@ -555,7 +580,7 @@ export default function UserDashboard() {
                         </div>
                         {holiday && (
                           <div className="mt-1">
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300 truncate max-w-full" title={holiday}>
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-300/50 text-slate-600 dark:bg-white/10 dark:text-slate-300 truncate max-w-full" title={holiday}>
                               {holiday}
                             </span>
                           </div>
@@ -591,7 +616,7 @@ export default function UserDashboard() {
                       const holiday = getHoliday(date);
 
                       return (
-                        <div key={dayIdx} className={`p-2 border-r border-slate-200 dark:border-white/5 last:border-r-0 min-h-[80px] ${holiday ? 'bg-red-50/30 dark:bg-red-900/5' : ''}`}>
+                        <div key={dayIdx} className={`p-2 border-r border-slate-200 dark:border-white/5 last:border-r-0 min-h-[80px] ${holiday ? 'bg-slate-200/50 dark:bg-white/5' : ''}`}>
                           {userLeavesOnDay.length > 0 ? (
                             <div className="space-y-1">
                               {userLeavesOnDay.map(leave => {
