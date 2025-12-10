@@ -12,7 +12,8 @@ import {
     CalendarDaysIcon,
     ArrowLeftIcon,
     CameraIcon,
-    CheckCircleIcon
+    CheckCircleIcon,
+    XCircleIcon
 } from "@heroicons/react/24/outline";
 import toast, { Toaster } from "react-hot-toast";
 import ThemeToggle from "../components/ThemeToggle";
@@ -121,6 +122,25 @@ export default function Profile() {
             console.error(error);
         } finally {
             setUploading(false);
+        }
+    }
+
+    async function cancelLeave(id) {
+        if (!window.confirm("Are you sure you want to cancel this leave?")) return;
+        try {
+            await updateDoc(doc(db, "leaveRequests", id), {
+                status: "Cancelled",
+                cancelledAt: Date.now()
+            });
+            // Update local state
+            setLeaves(prev => prev.map(l => l.id === id ? { ...l, status: "Cancelled" } : l));
+            toast.success("Leave cancelled successfully");
+
+            // Note: Balance is automatically restored because 'getLeaveStats' and 'getLeaveBalance' 
+            // only count "Approved" leaves. Cancelled leaves are ignored.
+        } catch (error) {
+            console.error("Error cancelling leave:", error);
+            toast.error("Failed to cancel leave");
         }
     }
 
@@ -286,7 +306,7 @@ export default function Profile() {
                 </div>
 
                 {/* Leave Statistics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                     <div className="bg-gradient-to-br from-primary-600 to-primary-700 border border-primary-500/20 rounded-2xl shadow-xl p-6">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-primary-100 text-sm font-medium">Total Leave Days</span>
@@ -322,6 +342,15 @@ export default function Profile() {
                         <div className="text-3xl font-bold text-white">{stats.approved}</div>
                         <p className="text-xs text-blue-200 mt-1">Requests approved</p>
                     </div>
+
+                    <div className="bg-gradient-to-br from-red-600 to-red-700 border border-red-500/20 rounded-2xl shadow-xl p-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-red-100 text-sm font-medium">Rejected</span>
+                            <XCircleIcon className="h-5 w-5 text-red-200" />
+                        </div>
+                        <div className="text-3xl font-bold text-white">{stats.rejected}</div>
+                        <p className="text-xs text-red-200 mt-1">Requests rejected</p>
+                    </div>
                 </div>
 
                 {/* Recent Leave Requests */}
@@ -338,17 +367,18 @@ export default function Profile() {
                                     <th className="px-6 py-4 font-medium">Category</th>
                                     <th className="px-6 py-4 font-medium">Reason</th>
                                     <th className="px-6 py-4 font-medium">Status</th>
+                                    <th className="px-6 py-4 font-medium text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-white/5">
                                 {leaves.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
+                                        <td colSpan="6" className="px-6 py-8 text-center text-slate-500">
                                             No leave requests yet
                                         </td>
                                     </tr>
                                 ) : (
-                                    leaves.slice(0, 10).map(leave => (
+                                    leaves.map(leave => (
                                         <tr key={leave.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                                             <td className="px-6 py-4 text-slate-600 dark:text-slate-400">
                                                 <div className="flex flex-col text-sm">
@@ -370,10 +400,21 @@ export default function Profile() {
                                             <td className="px-6 py-4">
                                                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${leave.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300' :
                                                     leave.status === 'Rejected' ? 'bg-red-500/20 text-red-600 dark:text-red-300' :
-                                                        'bg-amber-500/20 text-amber-600 dark:text-amber-300'
+                                                        leave.status === 'Cancelled' ? 'bg-slate-500/20 text-slate-600 dark:text-slate-300' :
+                                                            'bg-amber-500/20 text-amber-600 dark:text-amber-300'
                                                     }`}>
                                                     {leave.status}
                                                 </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                {(leave.status === 'Pending' || leave.status === 'Approved') && (
+                                                    <button
+                                                        onClick={() => cancelLeave(leave.id)}
+                                                        className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-1.5 rounded border border-red-200 dark:border-red-900/30 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     ))

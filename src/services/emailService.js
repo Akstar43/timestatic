@@ -1,7 +1,7 @@
 import emailjs from '@emailjs/browser';
 import { EMAILJS_CONFIG } from '../config/emailConfig';
 
-export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDetails) => {
+export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDetails, reason = "") => {
     if (!userEmail) {
         console.warn("No recipient email provided");
         return { success: false, error: "No recipient email" };
@@ -12,11 +12,16 @@ export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDet
         return { success: false, error: "EmailJS not configured" };
     }
 
+    // Determine color based on status (Green for Approved, Red for Rejected, Gray for others)
+    const statusColor = status === "Approved" ? "#10b981" : status === "Rejected" ? "#ef4444" : "#6b7280";
+
     // Safe template parameters with fallback/default values
     const templateParams = {
         email: userEmail,
         to_name: userName || "User",
         status: status || "Pending",
+        status_color: statusColor,
+        rejection_reason: reason || "", // Pass rejection reason
         start_date: leaveDetails?.from || "",
         end_date: leaveDetails?.to || "",
         leave_type: leaveDetails?.type || "",
@@ -53,7 +58,7 @@ export const sendWelcomeEmail = async (userEmail, userName) => {
     }
 
     const templateParams = {
-        to_email: userEmail,
+        email: userEmail,
         to_name: userName || "User",
         subject: "Welcome to Leave Management System",
         message: "You have been registered in the Leave Management System. You can now log in using your Google account."
@@ -97,8 +102,17 @@ export const sendNewLeaveRequestEmail = async (leaveDetails, userName) => {
         reason: leaveDetails?.reason || "No reason provided",
         message: `New leave request from ${userName} (${leaveDetails?.from} to ${leaveDetails?.to}). Reason: ${leaveDetails?.reason}`,
         approve_url: approveUrl,
-        reject_url: rejectUrl
+        reject_url: rejectUrl,
+        rejection_section: "",
+        status: leaveDetails?.status || ""
     };
+    if (templateParams1.status === "Rejected") {
+        templateParams1.rejection_section = `
+    <div style="background-color: #fef2f2; border: 1px solid #ef4444; padding: 10px; margin-top: 15px; border-radius: 5px; color: #991b1b;">
+        <strong>Reason for Rejection:</strong><br/>
+        ${templateParams1.reason}
+    </div>`;
+    }
 
     try {
         const response = await emailjs.send(

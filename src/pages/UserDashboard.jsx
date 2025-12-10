@@ -198,6 +198,49 @@ export default function UserDashboard() {
 
     if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
 
+    // Calculate requested duration
+    const start = new Date(fromDateStr);
+    const end = new Date(toDateStr);
+    const dayDiff = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    const requestedDays = isHalfDay ? 0.5 : dayDiff;
+
+    // Get current balance
+    const { total, used } = getLeaveBalance();
+
+    // Calculate pending usage to prevent overbooking
+    const pendingUsage = leaves
+      .filter(l => {
+        const cat = LEAVE_CATEGORIES[l.category];
+        return l.userId === currentUserData.id &&
+          l.status === "Pending" &&
+          cat?.type === "Deductable";
+      })
+      .reduce((sum, l) => {
+        const pStart = new Date(l.from);
+        const pEnd = new Date(l.to);
+        const pDayDiff = Math.floor((pEnd - pStart) / (1000 * 60 * 60 * 24)) + 1;
+        return sum + (l.isHalfDay ? 0.5 : pDayDiff);
+      }, 0);
+
+    const availableBalance = total - used - pendingUsage;
+
+    // Auto-Rejection Logic
+    let status = "Pending";
+    let adminResponse = "";
+    let isAutoRejected = false;
+
+    if (categoryInfo?.type === "Deductable") {
+      if (total === 0) {
+        status = "Rejected";
+        adminResponse = "System: No leave days allocated.";
+        isAutoRejected = true;
+      } else if (requestedDays > availableBalance) {
+        status = "Rejected";
+        adminResponse = `System: Insufficient balance. Requested ${requestedDays} days, but you only have ${availableBalance} days available (including pending requests).`;
+        isAutoRejected = true;
+      }
+    }
+
     const leave = {
       userId: currentUserData.id, // Standardize on Firestore ID
       userName: currentUserData.name || "Unknown User",
@@ -208,13 +251,19 @@ export default function UserDashboard() {
       reason,
       isHalfDay,
       halfType: isHalfDay ? timePeriod : null,
-      status: "Pending",
+      status, // Pending or Rejected
+      adminResponse: isAutoRejected ? adminResponse : null,
       createdAt: ts()
     };
 
     addDoc(collection(db, "leaveRequests"), leave)
       .then(async (docRef) => {
-        toast.success("Leave request submitted successfully");
+        if (isAutoRejected) {
+          toast.error("Leave Request Auto-Rejected: Insufficient Balance");
+        } else {
+          toast.success("Leave request submitted successfully");
+        }
+
         setFromDateStr(""); setToDateStr(""); setReason("");
         setLeaveCategory("Holiday");
         setTimePeriod("Full Day");
@@ -222,17 +271,18 @@ export default function UserDashboard() {
 
         const leaveWithId = { ...leave, id: docRef.id };
 
-        // Send Email Notification to Admin
+        // Send Email Notification to Admin (Only if NOT auto-rejected, usually admins don't need spam for auto-rejects, OR maybe they do? Let's send it so they know someone tried)
+        // Actually, let's send it.
         const adminEmailResult = await sendNewLeaveRequestEmail(leaveWithId, leave.userName);
         if (!adminEmailResult.success) {
           console.warn("Failed to send admin email:", adminEmailResult.error);
         }
 
-        // Send Confirmation Email to User
-        // Using currentUserData.email if available, otherwise fallback
+        // Send Confirmation/Rejection Email to User
         const userEmail = currentUserData?.email;
         if (userEmail) {
-          const userEmailResult = await sendLeaveStatusEmail(userEmail, leave.userName, "Pending", leave);
+          // Pass the auto-rejection reason if applicable
+          const userEmailResult = await sendLeaveStatusEmail(userEmail, leave.userName, status, leave, isAutoRejected ? adminResponse : "");
           if (!userEmailResult.success) {
             console.warn("Failed to send user confirmation email:", userEmailResult.error);
           }
@@ -529,7 +579,7 @@ export default function UserDashboard() {
                     {weekDates.map((date, dayIdx) => {
                       // find leaves for this user on this date
                       // FIX: Match by Firestore ID (l.userId) against user.id
-                      const userLeavesOnDay = leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date));
+                      const userLeavesOnDay = leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled");
                       const holiday = getHoliday(date);
 
                       return (
@@ -578,7 +628,7 @@ export default function UserDashboard() {
                                         ) : (
                                           // Evening half => right aligned half width, rounded right
                                           <div className="w-full flex justify-end">
-                                            <div className={`w-1/2 rounded-r-md p-2 text-center hover:scale-105 transition-transform cursor-pointer ${bgClass}`}
+                                            <div className={`w-1/2 rounded-r-md p-2 text-center hover:scale-105 transition-transform cursor-pointer ${bgClass} ${leave.status === 'Pending' ? 'opacity-60 border-dashed border-2' : ''}`}
                                               title={`${leave.category} (Evening Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}>
                                               <div className="text-[10px] text-white/90 font-medium truncate">
                                                 {leave.category}
@@ -597,7 +647,7 @@ export default function UserDashboard() {
                                     ) : (
                                       // full width block (or multi-day)
                                       <div
-                                        className={`${bgClass} rounded-md p-2 text-center hover:scale-105 transition-transform cursor-pointer`}
+                                        className={`${bgClass} rounded-md p-2 text-center hover:scale-105 transition-transform cursor-pointer ${leave.status === 'Pending' ? 'opacity-60 border-dashed border-2' : ''}`}
                                         title={`${leave.category}${leave.isHalfDay ? ` (${leave.halfType} Half Day)` : ''}\n${leave.reason || ''}\nStatus: ${leave.status}`}
                                       >
                                         <div className="text-[10px] text-white/90 font-medium truncate">

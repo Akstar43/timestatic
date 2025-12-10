@@ -67,6 +67,7 @@ export default function Admin() {
 
   // Deep Link Action State
   const [actionModal, setActionModal] = useState(null); // { id, action, userDetails... }
+  const [rejectionReason, setRejectionReason] = useState("");
 
   useEffect(() => {
     const action = searchParams.get("action");
@@ -99,8 +100,13 @@ export default function Admin() {
     const status = action === "Approved" ? "Approved" : action === "Rejected" ? "Rejected" : null;
 
     if (status) {
-      await setLeaveStatus(id, status);
+      // Pass reason only if rejected
+      const reasonToSend = status === "Rejected" ? rejectionReason : "";
+
+      await setLeaveStatus(id, status, reasonToSend);
+
       setActionModal(null);
+      setRejectionReason(""); // Clear reason
       setSearchParams({}); // Clear URL
       toast.success(`Successfully ${status} request via Link`);
     }
@@ -412,10 +418,14 @@ export default function Admin() {
 
 
 
-  async function setLeaveStatus(id, status) {
+  async function setLeaveStatus(id, status, reason = "") {
     try {
-      await updateDoc(doc(db, "leaveRequests", id), { status, reviewedAt: ts() });
-      setLeaveRequests(prev => prev.map(l => l.id === id ? { ...l, status } : l));
+      await updateDoc(doc(db, "leaveRequests", id), {
+        status,
+        reviewedAt: ts(),
+        adminResponse: reason // Save admin response/reason
+      });
+      setLeaveRequests(prev => prev.map(l => l.id === id ? { ...l, status, adminResponse: reason } : l));
       toast.success(`Leave ${status.toLowerCase()}`);
 
       // Send Email Notification
@@ -424,7 +434,8 @@ export default function Admin() {
 
       if (request && user) {
         console.log("Attempting to send email to:", user.email);
-        sendLeaveStatusEmail(user.email, user.name, status, request).then(result => {
+        // Pass reason to email service
+        sendLeaveStatusEmail(user.email, user.name, status, request, reason).then(result => {
           if (result && result.success) {
             toast.success("Email notification sent");
           } else {
@@ -508,6 +519,22 @@ export default function Admin() {
             <p className="text-slate-600 dark:text-slate-300 mb-6">
               Do you want to <strong className={actionModal.action === "Approved" ? "text-emerald-500" : "text-red-500"}>{actionModal.action}</strong> the leave request for <strong>{actionModal.userName}</strong>?
             </p>
+
+            {actionModal.action === "Rejected" && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Reason for Rejection (Optional)
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-all text-slate-900 dark:text-white resize-none"
+                  rows="3"
+                  placeholder="e.g., Low leave balance, Critical project timeline..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                ></textarea>
+              </div>
+            )}
+
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => { setActionModal(null); setSearchParams({}); }}
@@ -650,7 +677,7 @@ export default function Admin() {
                     <BuildingOfficeIcon className="h-5 w-5 text-secondary-400" />
                     Organization Management
                   </h2>
-                  <div className="space-y-6">
+                  <div className="space-y-6 flexflex-flow">
                     <div className="flex flex-col sm:flex-row gap-3">
                       <input
                         className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
@@ -668,7 +695,7 @@ export default function Admin() {
 
                     <div className="border-t border-slate-200 dark:border-white/5 pt-6 flex-wrap">
                       <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Assign User to Organization</h3>
-                      <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
                         <select
                           className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
                           value={selectedUser}
