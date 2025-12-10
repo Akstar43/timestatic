@@ -17,6 +17,7 @@ import {
 } from "@heroicons/react/24/outline";
 import toast, { Toaster } from "react-hot-toast";
 import ThemeToggle from "../components/ThemeToggle";
+import { LEAVE_CATEGORIES } from "../context/leavetypes";
 
 export default function Profile() {
     const auth = getAuth();
@@ -32,10 +33,12 @@ export default function Profile() {
     const [isEditing, setIsEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [leaves, setLeaves] = useState([]);
+    const [holidays, setHolidays] = useState({});
 
     useEffect(() => {
         loadUserData();
         loadLeaves();
+        loadHolidays();
     }, []);
 
     async function loadUserData() {
@@ -47,7 +50,7 @@ export default function Profile() {
                 const doc = snapshot.docs[0];
                 const data = doc.data();
                 setUserDocId(doc.id);
-                setUserData(data);
+                setUserData({ ...data, id: doc.id }); // Add Firestore doc ID to userData
                 setName(data.name || "");
                 setEmail(data.email || "");
                 setOrganization(data.organizationName || "");
@@ -63,10 +66,23 @@ export default function Profile() {
         try {
             const snapshot = await getDocs(collection(db, "leaveRequests"));
             const allLeaves = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            const userLeaves = allLeaves.filter(l => l.userId === currentUserId);
-            setLeaves(userLeaves);
+            setLeaves(allLeaves); // Load ALL leaves, filter in getLeaveStats
         } catch (error) {
             console.error("Failed to load leaves:", error);
+        }
+    }
+
+    async function loadHolidays() {
+        try {
+            const snapshot = await getDocs(collection(db, "publicHolidays"));
+            const holidayData = {};
+            snapshot.docs.forEach(d => {
+                const data = d.data();
+                holidayData[data.date] = data.name;
+            });
+            setHolidays(holidayData);
+        } catch (error) {
+            console.error("Failed to load holidays:", error);
         }
     }
 
@@ -144,19 +160,63 @@ export default function Profile() {
         }
     }
 
-    function getLeaveStats() {
-        const total = userData?.leaveDaysAssigned || 0;
-        const approved = leaves.filter(l => l.status === "Approved" && l.type === "Deductable").length;
-        const pending = leaves.filter(l => l.status === "Pending").length;
-        const rejected = leaves.filter(l => l.status === "Rejected").length;
+    // Helper function to check if a date is a weekend
+    function isWeekend(date) {
+        const day = date.getDay();
+        return day === 0 || day === 6; // Sunday or Saturday
+    }
 
-        const used = leaves
-            .filter(l => l.status === "Approved" && l.type === "Deductable")
+    // Helper to calculate business days (excluding weekends and holidays)
+    function calculateLeaveDuration(fromStr, toStr, isHalfDay = false) {
+        const start = new Date(fromStr);
+        const end = new Date(toStr);
+        let count = 0;
+        let curr = new Date(start);
+
+        while (curr <= end) {
+            const dateStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
+
+            // Only count if it's NOT a weekend AND NOT a holiday
+            if (!isWeekend(curr) && !holidays[dateStr]) {
+                count++;
+            }
+            curr.setDate(curr.getDate() + 1);
+        }
+
+        if (count === 0) return 0;
+        return isHalfDay ? 0.5 : count;
+    }
+
+    function getLeaveStats() {
+        if (!userData) return { total: 0, used: 0, remaining: 0, approved: 0, pending: 0, rejected: 0 };
+
+        const total = userData.leaveDaysAssigned || 0;
+
+        // Filter leaves for THIS user by Firestore document ID (not Auth UID)
+        // Match UserDashboard logic exactly
+        const userLeaves = leaves.filter(l => l.userId === userData.id);
+
+        // DEBUG
+        console.log("📊 Profile Leave Stats Debug:");
+        console.log("  userData.id:", userData.id);
+        console.log("  Total leaves:", leaves.length);
+        console.log("  User leaves:", userLeaves.length);
+        console.log("  User leaves detail:", userLeaves);
+
+        // Count approved deductable leave days (business days only)
+        const used = userLeaves
+            .filter(l => {
+                const categoryInfo = LEAVE_CATEGORIES[l.category];
+                return l.status === "Approved" && categoryInfo?.type === "Deductable";
+            })
             .reduce((sum, l) => {
-                const fromDate = new Date(l.from);
-                const toDate = new Date(l.to);
-                return sum + (Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1);
+                return sum + calculateLeaveDuration(l.from, l.to, l.isHalfDay);
             }, 0);
+
+        // Count number of requests by status
+        const approved = userLeaves.filter(l => l.status === "Approved").length;
+        const pending = userLeaves.filter(l => l.status === "Pending").length;
+        const rejected = userLeaves.filter(l => l.status === "Rejected").length;
 
         return { total, used, remaining: total - used, approved, pending, rejected };
     }

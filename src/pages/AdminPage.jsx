@@ -501,6 +501,47 @@ export default function Admin() {
     }
   }
 
+  async function seedInternationalHolidays() {
+    const currentYear = new Date().getFullYear();
+    const internationalHolidays = [
+      { name: "New Year's Day", date: `${currentYear}-01-01` },
+      { name: "Valentine's Day", date: `${currentYear}-02-14` },
+      { name: "International Women's Day", date: `${currentYear}-03-08` },
+      { name: "Good Friday", date: `${currentYear}-04-18` }, // Approximate, varies yearly
+      { name: "Easter Monday", date: `${currentYear}-04-21` }, // Approximate, varies yearly
+      { name: "Labour Day", date: `${currentYear}-05-01` },
+      { name: "Christmas Day", date: `${currentYear}-12-25` },
+      { name: "Boxing Day", date: `${currentYear}-12-26` },
+      { name: "New Year's Eve", date: `${currentYear}-12-31` }
+    ];
+
+    try {
+      let addedCount = 0;
+      for (const holiday of internationalHolidays) {
+        // Check if holiday already exists
+        const exists = holidays.some(h => h.date === holiday.date);
+        if (!exists) {
+          const docRef = await addDoc(collection(db, "publicHolidays"), {
+            name: holiday.name,
+            date: holiday.date,
+            createdAt: ts()
+          });
+          setHolidays(prev => [...prev, { id: docRef.id, ...holiday }].sort((a, b) => a.date.localeCompare(b.date)));
+          addedCount++;
+        }
+      }
+      if (addedCount > 0) {
+        toast.success(`Added ${addedCount} international holidays for ${currentYear}`);
+      } else {
+        toast.info("All international holidays already exist");
+      }
+    } catch (err) {
+      console.error("Failed to seed holidays:", err);
+      toast.error("Failed to add international holidays");
+    }
+  }
+
+
   const remainingLeaves = selectedUser ? getRemainingLeaves(selectedUser) : "-";
 
   const SidebarItem = ({ id, icon: Icon, label }) => (
@@ -607,13 +648,14 @@ export default function Admin() {
 
         <div className="mb-8 px-2">
           <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
-            Admin Panel (Updated)
+            Admin Panel
           </h1>
         </div>
 
         <nav className="flex-1 space-y-2">
           <SidebarItem id="usersOrgs" icon={UsersIcon} label="Users & Organizations" />
           <SidebarItem id="leaveMgmt" icon={CalendarDaysIcon} label="Leave Management" />
+          <SidebarItem id="holidays" icon={GlobeAmericasIcon} label="Public Holidays" />
           <SidebarItem id="notificationsTab" icon={BellIcon} label="Notifications" />
         </nav>
 
@@ -1054,6 +1096,20 @@ export default function Admin() {
                     Add Holiday
                   </button>
                 </div>
+
+                {/* Quick Add International Holidays */}
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5">
+                  <button
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                    onClick={seedInternationalHolidays}
+                  >
+                    <GlobeAmericasIcon className="h-5 w-5" />
+                    Auto-Add International Holidays ({new Date().getFullYear()})
+                  </button>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center italic">
+                    Adds: New Year's, Christmas, Easter, Labour Day, etc.
+                  </p>
+                </div>
               </div>
 
               {/* Holidays List */}
@@ -1099,60 +1155,6 @@ export default function Admin() {
                 </div>
               </div>
 
-              {/* Public Holidays Management */}
-              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
-                <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
-                  <CalendarDaysIcon className="h-5 w-5 text-amber-500" />
-                  Public Holidays
-                </h2>
-
-                {/* Add Holiday Form */}
-                <div className="flex flex-col sm:flex-row gap-3 mb-6 bg-slate-50 dark:bg-dark-bg p-4 rounded-xl border border-slate-200 dark:border-white/5">
-                  <input
-                    className="flex-1 bg-white dark:bg-dark-card border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-slate-900 dark:text-white"
-                    placeholder="Holiday Name (e.g. National Day)"
-                    value={newHolidayName}
-                    onChange={e => setNewHolidayName(e.target.value)}
-                  />
-                  <input
-                    type="date"
-                    className="sm:w-48 bg-white dark:bg-dark-card border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-slate-900 dark:text-white"
-                    value={newHolidayDate}
-                    onChange={e => setNewHolidayDate(e.target.value)}
-                  />
-                  <button
-                    className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-amber-600/20"
-                    onClick={addHoliday}
-                  >
-                    Add Holiday
-                  </button>
-                </div>
-
-                {/* Holiday List */}
-                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                  {holidays.length === 0 ? (
-                    <div className="text-center text-slate-500 py-8 italic">No holidays defined yet.</div>
-                  ) : (
-                    holidays.map(h => (
-                      <div key={h.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-white/5 rounded-lg hover:border-amber-500/30 transition-colors">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                          <span className="font-mono text-sm text-slate-500 dark:text-slate-400 bg-white dark:bg-dark-card px-2 py-1 rounded border border-slate-200 dark:border-white/5">
-                            {h.date}
-                          </span>
-                          <span className="font-medium text-slate-900 dark:text-white">{h.name}</span>
-                        </div>
-                        <button
-                          className="bg-red-50 dark:bg-red-900/10 text-red-500 dark:text-red-400 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                          onClick={() => deleteHoliday(h.id)}
-                          title="Remove Holiday"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
             </div>
           )}
 

@@ -63,6 +63,23 @@ export default function UserDashboard() {
     return holidays[dateStr];
   };
 
+  // Helper to check if a date is a non-working day (based on user's working days config)
+  const isNonWorkingDay = (date, user) => {
+    if (!user || !user.workingDays || user.workingDays.length === 0) {
+      // Default: Saturday and Sunday are non-working
+      const dayOfWeek = date.getDay();
+      return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+    }
+
+    // Map day index to day name
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const dayName = dayNames[date.getDay()];
+
+    // If the day is NOT in the user's working days, it's a non-working day
+    return !user.workingDays.includes(dayName);
+  };
+
+
 
 
   useEffect(() => {
@@ -535,7 +552,7 @@ export default function UserDashboard() {
                 <ChevronLeftIcon className="h-5 w-5" />
               </button>
               <button
-                className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-white"
+                className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 onClick={nextWeek}
                 title="Next Week"
               >
@@ -558,165 +575,125 @@ export default function UserDashboard() {
           </div>
 
           {/* Calendar grid */}
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="overflow-x-auto -mx-4 sm:mx-0 pb-4">
             <div className="px-4 sm:px-0">
-              <div className="min-w-[900px]">
-                {/* header */}
-                <div className="grid grid-cols-[180px_repeat(7,1fr)] sm:grid-cols-[220px_repeat(7,1fr)] border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-bg/30">
-                  <div className="sticky left-0 z-20 p-4 border-r border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-dark-card shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase whitespace-nowrap">Team Member</span>
-                  </div>
-                  {weekDates.map((date, idx) => {
+              <div className="min-w-[900px] bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden p-6">
+
+                {/* Day headers - just the letters */}
+                <div className="grid grid-cols-[180px_repeat(7,1fr)] gap-2 mb-4">
+                  <div></div>
+                  {DAYS.map((day, idx) => {
+                    const date = weekDates[idx];
                     const isToday = date.toDateString() === new Date().toDateString();
-                    const holiday = getHoliday(date);
+
                     return (
-                      <div key={idx} className={`p-2 sm:p-4 text-center border-r border-slate-200 dark:border-white/5 last:border-r-0 ${holiday ? 'bg-slate-200/50 dark:bg-white/5' : ''}`}>
-                        <div className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-medium mb-1">{DAYS[idx]}</div>
-                        <div className={`text-base sm:text-lg font-bold ${isToday ? 'text-primary-500 dark:text-primary-400' : 'text-slate-700 dark:text-white'}`}>
-                          {date.getDate()}
-                        </div>
-                        <div className="text-[9px] sm:text-[10px] text-slate-500">
-                          {date.toLocaleDateString('en-US', { month: 'short' })}
-                        </div>
-                        {holiday && (
-                          <div className="mt-1">
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-300/50 text-slate-600 dark:bg-white/10 dark:text-slate-300 truncate max-w-full" title={holiday}>
-                              {holiday}
-                            </span>
-                          </div>
-                        )}
+                      <div key={idx} className="text-center flex justify-center">
+                        <span className={`text-xs font-bold uppercase w-6 h-6 rounded-full flex items-center justify-center transition-all
+                          ${isToday
+                            ? 'ring-2 ring-primary-600 text-primary-600 dark:text-primary-400 dark:ring-primary-500'
+                            : 'text-slate-400 dark:text-slate-500'
+                          }`}>
+                          {day.charAt(0)}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* user rows */}
-                {users.length > 0 ? users.map(user => (
-                  <div key={user.id} className="grid grid-cols-[180px_repeat(7,1fr)] sm:grid-cols-[220px_repeat(7,1fr)] border-b border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-                    {/* user info */}
-                    <div className="sticky left-0 z-10 p-4 border-r border-slate-200 dark:border-white/5 flex items-center gap-3 bg-white dark:bg-dark-card shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center flex-shrink-0">
-                        {user.photoURL ? (
-                          <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-white font-medium text-sm">{user.name?.charAt(0) || 'U'}</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-slate-700 dark:text-white truncate">{user.name || 'Unknown'}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email || ''}</div>
-                      </div>
-                    </div>
-
-                    {/* day cells */}
-                    {weekDates.map((date, dayIdx) => {
-                      // find leaves for this user on this date
-                      // FIX: Match by Firestore ID (l.userId) against user.id
-                      const userLeavesOnDay = leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled");
-                      const holiday = getHoliday(date);
-
-                      return (
-                        <div key={dayIdx} className={`p-2 border-r border-slate-200 dark:border-white/5 last:border-r-0 min-h-[80px] ${holiday ? 'bg-slate-200/50 dark:bg-white/5' : ''}`}>
-                          {userLeavesOnDay.length > 0 ? (
-                            <div className="space-y-1">
-                              {userLeavesOnDay.map(leave => {
-                                const bgClass = getCategoryColor(leave.category);
-                                const isHalf = !!leave.isHalfDay;
-                                const halfType = leave.halfType || null;
-
-                                // if half-day and the date is the start date (or single-day record), show half-block
-                                const startDateOnly = leave.fromDateOnly || (() => {
-                                  const f = parseStoredDate(leave.from);
-                                  return f ? `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}` : null;
-                                })();
-
-                                const endDateOnly = leave.toDateOnly || (() => {
-                                  const e = parseStoredDate(leave.to);
-                                  return e ? `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, '0')}-${String(e.getDate()).padStart(2, '0')}` : null;
-                                })();
-
-                                const cellDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
-                                const shouldShowHalf = isHalf && startDateOnly && startDateOnly === cellDateStr;
-
-                                return (
-                                  <div key={leave.id} className="w-full h-auto">
-                                    {shouldShowHalf ? (
-                                      <div className="flex w-full">
-                                        {/* Morning half => left aligned half width, rounded left */}
-                                        {halfType === "Morning" ? (
-                                          <div className={`w-1/2 rounded-l-md p-2 text-center hover:scale-105 transition-transform cursor-pointer ${bgClass}`}
-                                            title={`${leave.category} (Morning Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}>
-                                            <div className="text-[10px] text-white/90 font-medium truncate">
-                                              {leave.category}
-                                            </div>
-                                            <div className="text-[9px] text-white/70">Half Day - Morning</div>
-                                            <div className={`text-[9px] mt-1 px-1 py-0.5 rounded
-                                              ${leave.status === 'Approved' ? 'bg-green-500/30 text-green-200' :
-                                                leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
-                                                  'bg-yellow-500/30 text-yellow-200'}`}>
-                                              {leave.status}
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          // Evening half => right aligned half width, rounded right
-                                          <div className="w-full flex justify-end">
-                                            <div className={`w-1/2 rounded-r-md p-2 text-center hover:scale-105 transition-transform cursor-pointer ${bgClass} ${leave.status === 'Pending' ? 'opacity-60 border-dashed border-2' : ''}`}
-                                              title={`${leave.category} (Evening Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}>
-                                              <div className="text-[10px] text-white/90 font-medium truncate">
-                                                {leave.category}
-                                              </div>
-                                              <div className="text-[9px] text-white/70">Half Day - Evening</div>
-                                              <div className={`text-[9px] mt-1 px-1 py-0.5 rounded
-                                                ${leave.status === 'Approved' ? 'bg-green-500/30 text-green-200' :
-                                                  leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
-                                                    'bg-yellow-500/30 text-yellow-200'}`}>
-                                                {leave.status}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      // full width block (or multi-day)
-                                      <div
-                                        className={`${bgClass} rounded-md p-2 text-center hover:scale-105 transition-transform cursor-pointer ${leave.status === 'Pending' ? 'opacity-60 border-dashed border-2' : ''}`}
-                                        title={`${leave.category}${leave.isHalfDay ? ` (${leave.halfType} Half Day)` : ''}\n${leave.reason || ''}\nStatus: ${leave.status}`}
-                                      >
-                                        <div className="text-[10px] text-white/90 font-medium truncate">
-                                          {leave.category} {leave.isHalfDay && `(${leave.halfType})`}
-                                        </div>
-                                        {leave.isHalfDay && <div className="text-[9px] text-white/70">Half Day</div>}
-                                        <div className={`text-[9px] mt-1 px-1 py-0.5 rounded ${leave.status === 'Approved' ? 'bg-green-500/30 text-green-200' :
-                                          leave.status === 'Rejected' ? 'bg-red-500/30 text-red-200' :
-                                            'bg-yellow-500/30 text-yellow-200'}`}>
-                                          {leave.status}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="h-full flex items-center justify-center">
-                              <div className="w-1 h-1 rounded-full bg-slate-200 dark:bg-slate-700/50"></div>
-                            </div>
-                          )}
+                {/* User rows */}
+                <div className="space-y-3">
+                  {users.length > 0 ? users.map(user => (
+                    <div key={user.id} className="grid grid-cols-[180px_repeat(7,1fr)] gap-2 items-center">
+                      {/* User info */}
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-white/10">
+                            {user.photoURL ? (
+                              <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
+                                <span className="text-slate-600 dark:text-slate-300 font-bold text-sm">{user.name?.charAt(0) || 'U'}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )) : (
-                  <div className="p-8 text-center text-slate-500">
-                    No team members found
-                  </div>
-                )}
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.name || 'Unknown'}</div>
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{user.email?.split('@')[0]}</div>
+                        </div>
+                      </div>
+
+                      {/* Date cells as circles */}
+                      {weekDates.map((date, dayIdx) => {
+                        const userLeavesOnDay = leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled");
+                        const holiday = getHoliday(date);
+                        const isNonWorking = isNonWorkingDay(date, user);
+                        const shouldBeGrey = holiday || isNonWorking;
+                        const isToday = date.toDateString() === new Date().toDateString();
+
+                        // Check if this is part of a multi-day leave span
+                        const hasLeave = userLeavesOnDay.length > 0;
+                        const leave = userLeavesOnDay[0]; // Take first leave if multiple
+
+                        return (
+                          <div key={dayIdx} className="flex justify-center">
+                            {hasLeave ? (
+                              // Check if it's a half day
+                              leave.isHalfDay ? (
+                                // Half-day: show semi-circle
+                                <div className="relative w-9 h-9 flex items-center justify-center">
+                                  {/* Background circle with gradient to create half-circle effect */}
+                                  <div
+                                    className={`absolute inset-0 rounded-full ${getCategoryColor(leave.category)}`}
+                                    style={{
+                                      clipPath: leave.halfType === 'Morning'
+                                        ? 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' // Left half
+                                        : 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' // Right half
+                                    }}
+                                  />
+                                  <span
+                                    className="relative z-10 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
+                                    title={`${leave.category} (${leave.halfType} Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                  >
+                                    {date.getDate()}
+                                  </span>
+                                </div>
+                              ) : (
+                                // Full day: show full colored circle
+                                <div
+                                  className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)}`}
+                                  title={`${leave.category}\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                >
+                                  {date.getDate()}
+                                </div>
+                              )
+                            ) : (
+                              // Regular date circle
+                              <div
+                                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium transition-all
+                                  ${shouldBeGrey
+                                    ? 'text-slate-300 dark:text-slate-600'
+                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                  }`}
+                              >
+                                {date.getDate()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )) : (
+                    <div className="p-12 text-center text-slate-400 dark:text-slate-500 italic">
+                      No users found
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </main>
-    </div >
+    </div>
   );
 }
