@@ -7,7 +7,14 @@
 
 export const EMAILJS_CONFIG = {
     SERVICE_ID: "service_754x2vf",   // e.g. "service_xxxxx"
-    TEMPLATE_ID: "template_nqv5gel",
-    TEMPLATE_ID1: "template_11cgy1i", // e.g. "template_xxxxx"
+
+    // Template 1: General Notification (No Actions)
+    // Used for: Welcome, Status Updates, OTP, Cancellations
+    TEMPLATE_GENERAL: "template_vens1wj",
+
+    // Template 2: Admin Action (With Approve/Reject Links)
+    // Used for: New Leave Requests
+    TEMPLATE_ADMIN_ACTION: "template_c56yo2d",
+
     PUBLIC_KEY: "XcrhBMAcXKgv4hRy_"    // e.g. "user_xxxxx" or public key from Account > API Keys
 };

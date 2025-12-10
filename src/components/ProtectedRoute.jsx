@@ -60,9 +60,7 @@ export default function ProtectedRoute({ children, requiredRole }) {
     if (requiredRole === "admin" && userRole !== "admin") {
       return <Navigate to="/user-dashboard" />;
     }
-    if (requiredRole === "user" && userRole === "admin") {
-      return <Navigate to="/admin" />;
-    }
+    // Note: Admins are allowed to access user routes (requiredRole="user")
   }
 
   return children;

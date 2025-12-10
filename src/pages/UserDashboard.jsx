@@ -317,6 +317,14 @@ export default function UserDashboard() {
         </h1>
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
+          {currentUserData?.role === 'admin' && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 px-4 py-2 rounded-lg text-sm font-medium transition-colors hidden sm:block"
+            >
+              Switch to Admin View
+            </button>
+          )}
           <button
             onClick={() => navigate('/profile')}
             className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">

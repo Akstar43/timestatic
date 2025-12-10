@@ -1,130 +1,130 @@
 import emailjs from '@emailjs/browser';
 import { EMAILJS_CONFIG } from '../config/emailConfig';
 
+
 export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDetails, reason = "") => {
-    if (!userEmail) {
-        console.warn("No recipient email provided");
-        return { success: false, error: "No recipient email" };
-    }
+    if (!userEmail) return { success: false, error: "No recipient email" };
+    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "EmailJS not configured" };
 
-    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") {
-        console.warn("EmailJS credentials not configured. Email will not be sent.");
-        return { success: false, error: "EmailJS not configured" };
-    }
-
-    // Determine color based on status (Green for Approved, Red for Rejected, Gray for others)
     const statusColor = status === "Approved" ? "#10b981" : status === "Rejected" ? "#ef4444" : "#6b7280";
 
-    // Safe template parameters with fallback/default values
+    // Construct message body
+    let messageBody = `Your leave request for ${leaveDetails?.category} (${leaveDetails?.from} to ${leaveDetails?.to}) has been ${status}.`;
+    if (status === "Rejected" && reason) {
+        messageBody += ` Reason: ${reason}`;
+    }
+
     const templateParams = {
-        email: userEmail,
+        to_email: userEmail,
         to_name: userName || "User",
-        status: status || "Pending",
-        status_color: statusColor,
-        rejection_reason: reason || "", // Pass rejection reason
-        start_date: leaveDetails?.from || "",
-        end_date: leaveDetails?.to || "",
-        leave_type: leaveDetails?.type || "",
-        leave_category: leaveDetails?.category || "",
-        message: `Your leave request for ${leaveDetails?.category || "N/A"} (${leaveDetails?.from || "N/A"} to ${leaveDetails?.to || "N/A"}) has been ${status || "Pending"}.`
+        subject: `Leave Request ${status}`,
+        title: `Leave Request Update`,
+        message: messageBody,
+        // Optional: pass status color if template supports it, else ignored
+        status_color: statusColor
     };
 
     try {
-        console.log("Sending email with params:", templateParams);
-        const response = await emailjs.send(
-            EMAILJS_CONFIG.SERVICE_ID,
-            EMAILJS_CONFIG.TEMPLATE_ID,
-            templateParams,
-            EMAILJS_CONFIG.PUBLIC_KEY
-        );
-        console.log('Email sent successfully!', response.status, response.text);
+        await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_GENERAL, templateParams, EMAILJS_CONFIG.PUBLIC_KEY);
+        console.log("Status email sent!");
         return { success: true };
     } catch (err) {
-        console.error('Failed to send email:', err);
+        console.error("Failed to send status email", err);
         return { success: false, error: err };
     }
 };
 
-// Optional: welcome email function (also safe)
 export const sendWelcomeEmail = async (userEmail, userName) => {
-    if (!userEmail) {
-        console.warn("No recipient email provided for welcome email");
-        return { success: false, error: "No recipient email" };
-    }
-
-    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") {
-        console.warn("EmailJS credentials not configured. Email will not be sent.");
-        return { success: false, error: "EmailJS not configured" };
-    }
+    if (!userEmail) return { success: false, error: "No email" };
+    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
 
     const templateParams = {
-        email: userEmail,
+        to_email: userEmail,
         to_name: userName || "User",
-        subject: "Welcome to Leave Management System",
-        message: "You have been registered in the Leave Management System. You can now log in using your Google account."
+        subject: "Welcome to TimeStatic",
+        title: "Welcome aboard!",
+        message: "You have been registered. You can now log in using your Google account or Email OTP."
     };
 
     try {
-        const response = await emailjs.send(
-            EMAILJS_CONFIG.SERVICE_ID,
-            EMAILJS_CONFIG.TEMPLATE_ID,
-            templateParams,
-            EMAILJS_CONFIG.PUBLIC_KEY
-        );
-        console.log("Welcome email sent!", response.status, response.text);
+        await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_GENERAL, templateParams, EMAILJS_CONFIG.PUBLIC_KEY);
+        console.log("Welcome email sent!");
         return { success: true };
     } catch (err) {
         console.error("Failed to send welcome email", err);
         return { success: false, error: err };
     }
 };
-// Notify Admin of a new leave request
-export const sendNewLeaveRequestEmail = async (leaveDetails, userName) => {
-    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") {
-        console.warn("EmailJS credentials not configured.");
-        return { success: false, error: "EmailJS not configured" };
-    }
 
-    // Generate Deep Links for Email Actions
+export const sendNewLeaveRequestEmail = async (leaveDetails, userName) => {
+    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
+
     const origin = window.location.origin;
     const approveUrl = `${origin}/admin?action=Approved&id=${leaveDetails.id}`;
     const rejectUrl = `${origin}/admin?action=Rejected&id=${leaveDetails.id}`;
 
-    // You might want to configure a specific ADMIN_EMAIL or just rely on the template routing
-    // For now, we'll assume the template sends to a configured Admin address or back to the system
-    const templateParams1 = {
-        email: "akmusajee53@gmail.com",
-        user_name: userName || "User",
-        leave_type: leaveDetails?.type || "",
-        leave_category: leaveDetails?.category || "",
-        start_date: leaveDetails?.from || "",
-        end_date: leaveDetails?.to || "",
-        reason: leaveDetails?.reason || "No reason provided",
-        message: `New leave request from ${userName} (${leaveDetails?.from} to ${leaveDetails?.to}). Reason: ${leaveDetails?.reason}`,
+    const messageBody = `New request from ${userName}. Type: ${leaveDetails?.type}, Category: ${leaveDetails?.category}, Dates: ${leaveDetails?.from} to ${leaveDetails?.to}. Reason: ${leaveDetails?.reason}`;
+
+    const templateParams = {
+        to_email: "akmusajee53@gmail.com",
+        to_name: "Admin",
+        subject: `New Leave Request: ${userName}`,
+        title: "New Leave Request",
+        message: messageBody,
         approve_url: approveUrl,
-        reject_url: rejectUrl,
-        rejection_section: "",
-        status: leaveDetails?.status || ""
+        reject_url: rejectUrl
     };
-    if (templateParams1.status === "Rejected") {
-        templateParams1.rejection_section = `
-    <div style="background-color: #fef2f2; border: 1px solid #ef4444; padding: 10px; margin-top: 15px; border-radius: 5px; color: #991b1b;">
-        <strong>Reason for Rejection:</strong><br/>
-        ${templateParams1.reason}
-    </div>`;
-    }
 
     try {
-        const response = await emailjs.send(
-            EMAILJS_CONFIG.SERVICE_ID,
-            EMAILJS_CONFIG.TEMPLATE_ID1, // You might want a separate template ID for Admin User Requests if needed, or reuse
-            templateParams1,
-            EMAILJS_CONFIG.PUBLIC_KEY
-        );
-        console.log("Admin notification sent!", response.status, response.text);
+        await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_ADMIN_ACTION, templateParams, EMAILJS_CONFIG.PUBLIC_KEY);
+        console.log("Admin notification sent!");
         return { success: true };
     } catch (err) {
-        console.error("Failed to send admin notification", err);
+        console.error("Failed to send admin email", err);
+        return { success: false, error: err };
+    }
+};
+
+export const sendOTPEmail = async (userEmail, otp, userName) => {
+    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
+
+    const templateParams = {
+        to_email: userEmail,
+        to_name: userName || "User",
+        subject: "Your Login Code",
+        title: "Login Verification",
+        message: `Your login code is: ${otp}. It expires in 10 minutes.`
+    };
+
+    try {
+        await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_GENERAL, templateParams, EMAILJS_CONFIG.PUBLIC_KEY);
+        console.log("OTP email sent!");
+        return { success: true };
+    } catch (err) {
+        console.error("Failed to send OTP email", err);
+        return { success: false, error: err };
+    }
+};
+
+export const sendLeaveCancellationEmail = async (leaveDetails, userName) => {
+    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
+
+    const messageBody = `${userName} has cancelled their leave (${leaveDetails?.category}, ${leaveDetails?.from} to ${leaveDetails?.to}).`;
+
+    const templateParams = {
+        to_email: "akmusajee53@gmail.com",
+        to_name: "Admin",
+        subject: `Leave Cancelled: ${userName}`,
+        title: "Leave Cancellation",
+        message: messageBody
+    };
+
+    try {
+        await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_GENERAL, templateParams, EMAILJS_CONFIG.PUBLIC_KEY);
+        console.log("Cancellation email sent!");
+        return { success: true };
+    } catch (err) {
+        console.error("Failed to send cancellation email", err);
         return { success: false, error: err };
     }
 };

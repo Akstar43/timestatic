@@ -11,6 +11,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 
 import { ThemeProvider } from "./context/ThemeContext";
 
+
+
 function App() {
   return (
     <ThemeProvider>
