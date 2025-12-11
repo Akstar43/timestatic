@@ -1,7 +1,7 @@
 // src/pages/UserDashboard.jsx
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, addDoc } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getAuth, signOut } from "firebase/auth";
 import { db, ts } from "../firebase/firebase";
 import { useNavigate } from "react-router-dom";
 import { LEAVE_CATEGORIES } from "../context/leavetypes"; // Shared categories
@@ -23,6 +23,16 @@ export default function UserDashboard() {
   const auth = getAuth();
   const navigate = useNavigate();
   const currentUserId = auth.currentUser?.uid;
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/login");
+    } catch (error) {
+      console.error("Error logging out:", error);
+      toast.error("Failed to logout");
+    }
+  };
 
   const [users, setUsers] = useState([]);
   const [leaves, setLeaves] = useState([]);
@@ -385,7 +395,7 @@ export default function UserDashboard() {
             </div>
           </button>
           <button
-            onClick={() => navigate('/login')}
+            onClick={handleLogout}
             className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors px-2 sm:px-4 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />
