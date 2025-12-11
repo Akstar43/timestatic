@@ -71,6 +71,23 @@ function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Listen for Foreground Notifications
+  useEffect(() => {
+    import("firebase/messaging").then(({ onMessage }) => {
+      onMessage(messaging, (payload) => {
+        console.log("Foreground Message received:", payload);
+        const { title, body } = payload.notification;
+
+        toast((t) => (
+          <div onClick={() => toast.dismiss(t.id)} className="cursor-pointer">
+            <p className="font-bold">{title}</p>
+            <p className="text-sm">{body}</p>
+          </div>
+        ), { duration: 5000, position: 'top-right' });
+      });
+    });
+  }, []);
   return (
     <ThemeProvider>
       <AuthProvider>
