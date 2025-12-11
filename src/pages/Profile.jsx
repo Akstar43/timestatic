@@ -309,6 +309,17 @@ export default function Profile() {
                                         >
                                             Edit Profile
                                         </button>
+                                        <button
+                                            onClick={async () => {
+                                                const { requestAndSaveNotificationPermission } = await import("../services/notificationService");
+                                                const success = await requestAndSaveNotificationPermission(currentUserId);
+                                                if (success) toast.success("Notifications Enabled!");
+                                                else toast("Please check browser settings if prompt didn't appear.");
+                                            }}
+                                            className="mt-4 ml-4 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                                        >
+                                            Enable Notifications (iOS)
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
@@ -483,7 +494,7 @@ export default function Profile() {
                         </table>
                     </div>
                 </div>
-            </main>
-        </div>
+            </main >
+        </div >
     );
 }

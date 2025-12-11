@@ -20,7 +20,9 @@ export default function Login() {
 
   // Auto-Redirect if ALREADY logged in (Persistence Fix)
   React.useEffect(() => {
+    console.log("Login Page Mounted. CurrentUser:", currentUser?.uid);
     if (currentUser) {
+      console.log("Redirecting logged-in user...");
       // Fetch role to know where to send them
       const fetchRoleAndRedirect = async () => {
         try {
@@ -31,7 +33,7 @@ export default function Login() {
             const userRole = userData.role || "user";
             navigate(userRole === "admin" ? "/admin" : "/user-dashboard", { replace: true });
           } else {
-            // User auth exists but db record missing? weird. maybe let them login again.
+            console.warn("User exists in Auth but not in DB?");
           }
         } catch (e) {
           console.error("Auto-redirect check failed", e);

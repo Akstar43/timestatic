@@ -1,6 +1,49 @@
 // src/services/notificationService.js
-import { collection, getDocs, query, where, addDoc } from "firebase/firestore";
-import { db, ts } from "../firebase/firebase";
+import { collection, getDocs, query, where, addDoc, updateDoc, doc } from "firebase/firestore";
+import { db, ts, messaging } from "../firebase/firebase";
+import { getToken } from "firebase/messaging";
+
+/**
+ * Request Notification Permission & Save Token.
+ * Can be called automatically (App.js) or manually (Profile Button for iOS).
+ * @param {string} userId - Auth UID of the user.
+ */
+export const requestAndSaveNotificationPermission = async (userId) => {
+    try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+            const currentToken = await getToken(messaging, {
+                vapidKey: "BCxxxxxxxx_YOUR_VAPID_KEY_OPTIONAL_BUT_RECOMMENDED_FOR_WIDER_SUPPORT"
+                // Note: For standard setup, getToken(messaging) works if service worker config is correct.
+            }).catch(err => console.error("GetToken failed", err));
+
+            if (currentToken) {
+                console.log('FCM Token Generated:', currentToken);
+
+                // Find User Document ID by UID
+                const q = query(collection(db, "users"), where("uid", "==", userId));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    const docId = querySnapshot.docs[0].id;
+                    await updateDoc(doc(db, "users", docId), {
+                        fcmToken: currentToken,
+                        fcmTokenUpdatedAt: new Date()
+                    });
+                    console.log('FCM Token saved to user profile');
+                    return true;
+                } else {
+                    console.warn('User profile not found for storing FCM token');
+                }
+            }
+        } else {
+            console.log('Notification permission denied');
+        }
+    } catch (error) {
+        console.error('Error getting notification token:', error);
+    }
+    return false;
+};
 
 /**
  * Sends a push notification to a user.
