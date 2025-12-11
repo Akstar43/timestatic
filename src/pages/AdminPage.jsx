@@ -23,6 +23,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
 import { sendLeaveStatusEmail, sendWelcomeEmail } from "../services/emailService";
 import { EMAILJS_CONFIG } from "../config/emailConfig";
+import { sendPushNotification } from "../services/notificationService";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -444,6 +445,13 @@ export default function Admin() {
       const user = users.find(u => u.id === request?.userId);
 
       if (request && user) {
+        // Send Push Notification
+        await sendPushNotification(
+          user.id,
+          `Leave ${status}`,
+          `Your leave request from ${request.from} to ${request.to} has been ${status}. ${reason ? `Reason: ${reason}` : ''}`
+        );
+
         console.log("Attempting to send email to:", user.email);
         // Pass reason to email service
         sendLeaveStatusEmail(user.email, user.name, status, request, reason).then(result => {
@@ -682,7 +690,7 @@ export default function Admin() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-full overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
+      <main className="flex-1 w-full max-w-full overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8 custom-scrollbar">
         <div className="max-w-7xl mx-auto animate-fade-in">
 
           {/* Users & Orgs Tab */}
@@ -790,7 +798,7 @@ export default function Admin() {
                 <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold">User Directory</h2>
                 </div>
-                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>
@@ -1002,7 +1010,7 @@ export default function Admin() {
                     Clear History
                   </button>
                 </div>
-                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs sm:text-sm uppercase tracking-wider">
                       <tr>

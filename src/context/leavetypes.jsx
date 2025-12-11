@@ -1,6 +1,6 @@
 export const LEAVE_CATEGORIES = {
     // Deductable
-    'Holiday': { type: 'Deductable', color: 'bg-white-500' },
+    'Holiday': { type: 'Deductable', color: 'bg-gray-500' },
     'Doctor Appointment': { type: 'Deductable', color: 'bg-cyan-500' },
 
     // Non-deductable

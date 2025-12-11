@@ -17,6 +17,7 @@ import {
 } from "@heroicons/react/24/outline";
 import ThemeToggle from "../components/ThemeToggle";
 import { sendNewLeaveRequestEmail, sendLeaveStatusEmail } from "../services/emailService";
+import { checkAndNotifyLowBalance } from "../services/notificationService";
 
 export default function UserDashboard() {
   const auth = getAuth();
@@ -325,6 +326,10 @@ export default function UserDashboard() {
           }
         }
 
+        // Check for Low Balance and Notify User
+        const currentBalance = total - used - pendingUsage - requestedDays;
+        checkAndNotifyLowBalance(currentBalance, currentUserData.id);
+
         loadLeaves();
       })
       .catch((err) => {
@@ -585,129 +590,134 @@ export default function UserDashboard() {
           </div>
 
           {/* Calendar grid */}
-          <div className="overflow-x-auto -mx-4 sm:mx-0 pb-4">
-            <div className="px-4 sm:px-0">
-              <div className="min-w-[600px] sm:min-w-[750px] lg:min-w-0 bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden p-3 sm:p-6">
+          <div className="px-0 sm:px-0">
+            <div className="bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden p-2 sm:p-6">
 
-                {/* Day headers - just the letters */}
-                <div className="grid grid-cols-[100px_repeat(7,1fr)] sm:grid-cols-[140px_repeat(7,1fr)] lg:grid-cols-[180px_repeat(7,1fr)] gap-1 sm:gap-2 mb-3 sm:mb-4">
-                  <div></div>
-                  {DAYS.map((day, idx) => {
-                    const date = weekDates[idx];
-                    const isToday = date.toDateString() === new Date().toDateString();
+              {/* Scrollable Wrapper */}
+              <div className="overflow-x-auto">
+                <div className="min-w-full">
 
-                    return (
-                      <div key={idx} className="text-center flex justify-center">
-                        <span className={`text-[10px] sm:text-xs font-bold uppercase w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center transition-all
-                          ${isToday
-                            ? 'ring-2 ring-primary-600 text-primary-600 dark:text-primary-400 dark:ring-primary-500'
-                            : 'text-slate-400 dark:text-slate-500'
-                          }`}>
-                          {day.charAt(0)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                  {/* Day headers - just the letters */}
+                  <div className="grid grid-cols-[80px_repeat(7,1fr)] sm:grid-cols-[140px_repeat(7,1fr)] lg:grid-cols-[180px_repeat(7,1fr)] gap-0.5 sm:gap-2 mb-2 sm:mb-4">
+                    <div></div>
+                    {DAYS.map((day, idx) => {
+                      const date = weekDates[idx];
+                      const isToday = date.toDateString() === new Date().toDateString();
 
-                {/* User rows */}
-                <div className="space-y-2 sm:space-y-3">
-                  {users.length > 0 ? users.map(user => (
-                    <div key={user.id} className="grid grid-cols-[100px_repeat(7,1fr)] sm:grid-cols-[140px_repeat(7,1fr)] lg:grid-cols-[180px_repeat(7,1fr)] gap-1 sm:gap-2 items-center">
-                      {/* User info */}
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="relative flex-shrink-0">
-                          <div className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-white/10">
-                            {user.photoURL ? (
-                              <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
-                                <span className="text-slate-600 dark:text-slate-300 font-bold text-[10px] sm:text-xs lg:text-sm">{user.name?.charAt(0) || 'U'}</span>
-                              </div>
-                            )}
+                      return (
+                        <div key={idx} className="text-center flex justify-center">
+                          <span className={`text-[10px] sm:text-xs font-bold uppercase w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center transition-all
+                              ${isToday
+                              ? 'ring-2 ring-primary-600 text-primary-600 dark:text-primary-400 dark:ring-primary-500'
+                              : 'text-slate-400 dark:text-slate-500'
+                            }`}>
+                            {day.charAt(0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* User rows */}
+                  <div className="space-y-1.5 sm:space-y-3 pb-2">
+                    {users.length > 0 ? users.map(user => (
+                      <div key={user.id} className="grid grid-cols-[80px_repeat(7,1fr)] sm:grid-cols-[140px_repeat(7,1fr)] lg:grid-cols-[180px_repeat(7,1fr)] gap-0.5 sm:gap-2 items-center">
+                        {/* User info */}
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <div className="relative flex-shrink-0">
+                            <div className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-white/10">
+                              {user.photoURL ? (
+                                <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
+                                  <span className="text-slate-600 dark:text-slate-300 font-bold text-[10px] sm:text-xs lg:text-sm">{user.name?.charAt(0) || 'U'}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11px] sm:text-xs lg:text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.name || 'Unknown'}</div>
+                            <div className="text-[9px] sm:text-[10px] lg:text-[11px] text-slate-400 dark:text-slate-500 truncate hidden sm:block">{user.email?.split('@')[0]}</div>
                           </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[11px] sm:text-xs lg:text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.name || 'Unknown'}</div>
-                          <div className="text-[9px] sm:text-[10px] lg:text-[11px] text-slate-400 dark:text-slate-500 truncate hidden sm:block">{user.email?.split('@')[0]}</div>
-                        </div>
-                      </div>
 
-                      {/* Date cells as circles */}
-                      {weekDates.map((date, dayIdx) => {
-                        const holiday = getHoliday(date);
-                        const isNonWorking = isNonWorkingDay(date, user);
-                        const shouldBeGrey = holiday || isNonWorking;
-                        const isToday = date.toDateString() === new Date().toDateString();
+                        {/* Date cells as circles */}
+                        {weekDates.map((date, dayIdx) => {
+                          const holiday = getHoliday(date);
+                          const isNonWorking = isNonWorkingDay(date, user);
+                          const shouldBeGrey = holiday || isNonWorking;
+                          const isToday = date.toDateString() === new Date().toDateString();
 
-                        // Only show leave colors on working days (not weekends/holidays)
-                        const userLeavesOnDay = !shouldBeGrey
-                          ? leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled")
-                          : [];
+                          // Only show leave colors on working days (not weekends/holidays)
+                          const userLeavesOnDay = !shouldBeGrey
+                            ? leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled")
+                            : [];
 
-                        const hasLeave = userLeavesOnDay.length > 0;
-                        const leave = userLeavesOnDay[0]; // Take first leave if multiple
+                          const hasLeave = userLeavesOnDay.length > 0;
+                          const leave = userLeavesOnDay[0]; // Take first leave if multiple
 
-                        return (
-                          <div key={dayIdx} className="flex justify-center">
-                            {hasLeave ? (
-                              // Check if it's a half day
-                              leave.isHalfDay ? (
-                                // Half-day: show semi-circle
-                                <div className="relative w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 flex items-center justify-center">
-                                  {/* Background circle with gradient to create half-circle effect */}
+                          return (
+                            <div key={dayIdx} className="flex justify-center">
+                              {hasLeave ? (
+                                // Check if it's a half day
+                                leave.isHalfDay ? (
+                                  // Half-day: show semi-circle
+                                  <div className="relative w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 flex items-center justify-center">
+                                    {/* Background circle with gradient to create half-circle effect */}
+                                    <div
+                                      className={`absolute inset-0 rounded-full ${getCategoryColor(leave.category)}`}
+                                      style={{
+                                        clipPath: leave.halfType === 'Morning'
+                                          ? 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' // Left half
+                                          : 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' // Right half
+                                      }}
+                                    />
+                                    <span
+                                      className="relative z-10 text-[10px] sm:text-[11px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
+                                      title={`${leave.category} (${leave.halfType} Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                    >
+                                      {date.getDate()}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  // Full day: show full colored circle
                                   <div
-                                    className={`absolute inset-0 rounded-full ${getCategoryColor(leave.category)}`}
-                                    style={{
-                                      clipPath: leave.halfType === 'Morning'
-                                        ? 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' // Left half
-                                        : 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' // Right half
-                                    }}
-                                  />
-                                  <span
-                                    className="relative z-10 text-[10px] sm:text-[11px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
-                                    title={`${leave.category} (${leave.halfType} Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                    className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] lg:text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)}`}
+                                    title={`${leave.category}\n${leave.reason || ''}\nStatus: ${leave.status}`}
                                   >
                                     {date.getDate()}
-                                  </span>
-                                </div>
+                                  </div>
+                                )
                               ) : (
-                                // Full day: show full colored circle
+                                // Regular date circle (including non-working days)
                                 <div
-                                  className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] lg:text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)}`}
-                                  title={`${leave.category}\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                  className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[11px] sm:text-xs lg:text-sm font-medium transition-all
+                                      ${shouldBeGrey
+                                      ? 'text-slate-300 dark:text-slate-600'
+                                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    }`}
+                                  title={holiday ? `Holiday: ${holiday}` : (isNonWorking ? 'Non-working day' : '')}
                                 >
                                   {date.getDate()}
                                 </div>
-                              )
-                            ) : (
-                              // Regular date circle (including non-working days)
-                              <div
-                                className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[11px] sm:text-xs lg:text-sm font-medium transition-all
-                                  ${shouldBeGrey
-                                    ? 'text-slate-300 dark:text-slate-600'
-                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                                  }`}
-                                title={holiday ? `Holiday: ${holiday}` : (isNonWorking ? 'Non-working day' : '')}
-                              >
-                                {date.getDate()}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )) : (
-                    <div className="p-12 text-center text-slate-400 dark:text-slate-500 italic">
-                      No users found
-                    </div>
-                  )}
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )) : (
+                      <div className="p-12 text-center text-slate-400 dark:text-slate-500 italic">
+                        No users found
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }
