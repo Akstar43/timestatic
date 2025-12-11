@@ -19,11 +19,15 @@ import toast, { Toaster } from "react-hot-toast";
 import ThemeToggle from "../components/ThemeToggle";
 import { LEAVE_CATEGORIES } from "../context/leavetypes";
 import { useTheme } from "../context/ThemeContext";
+import { THEMES as ALL_THEMES } from "../context/themes";
 
 export default function Profile() {
     const auth = getAuth();
     const navigate = useNavigate();
-    const { currentTheme, changeTheme, themes } = useTheme();
+    const themeCtx = useTheme() || {};
+    const changeTheme = typeof themeCtx.changeTheme === 'function' ? themeCtx.changeTheme : () => console.warn('changeTheme not ready');
+    const currentTheme = themeCtx.currentTheme || 'blue';
+    const themes = themeCtx.themes;
     const currentUserId = auth.currentUser?.uid;
 
     const [userData, setUserData] = useState(null);
@@ -38,12 +42,15 @@ export default function Profile() {
     const [holidays, setHolidays] = useState({});
 
     useEffect(() => {
-        loadUserData();
+        if (currentUserId) {
+            loadUserData();
+        }
         loadLeaves();
         loadHolidays();
-    }, []);
+    }, [currentUserId]);
 
     async function loadUserData() {
+        if (!currentUserId) return;
         try {
             const q = query(collection(db, "users"), where("uid", "==", currentUserId));
             const snapshot = await getDocs(q);
@@ -311,17 +318,20 @@ export default function Profile() {
                                         >
                                             Edit Profile
                                         </button>
-                                        <button
-                                            onClick={async () => {
-                                                const { requestAndSaveNotificationPermission } = await import("../services/notificationService");
-                                                const success = await requestAndSaveNotificationPermission(currentUserId);
-                                                if (success) toast.success("Notifications Enabled!");
-                                                else toast("Please check browser settings if prompt didn't appear.");
-                                            }}
-                                            className="mt-4 ml-4 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
-                                        >
-                                            Enable Notifications (iOS)
-                                        </button>
+
+                                        {((/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && (
+                                            <button
+                                                onClick={async () => {
+                                                    const { requestAndSaveNotificationPermission } = await import("../services/notificationService");
+                                                    const success = await requestAndSaveNotificationPermission(currentUserId);
+                                                    if (success) toast.success("Notifications Enabled!");
+                                                    else toast("Please check browser settings if prompt didn't appear.");
+                                                }}
+                                                className="mt-4 ml-4 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                                            >
+                                                Enable Notifications (iOS)
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
@@ -384,13 +394,13 @@ export default function Profile() {
                         Personalize Look
                     </h3>
                     <div className="flex gap-4 flex-wrap">
-                        {Object.entries(themes).map(([key, theme]) => (
+                        {(themes || ALL_THEMES) && Object.entries(themes || ALL_THEMES).map(([key, theme]) => (
                             <button
                                 key={key}
                                 onClick={() => changeTheme(key)}
                                 className={`
                                     group relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200
-                                    ${currentTheme === key ? 'ring-2 ring-offset-2 ring-slate-400 dark:ring-white dark:ring-offset-dark-card scale-110' : 'hover:scale-105'}
+                                    ${(currentTheme || 'blue') === key ? 'ring-2 ring-offset-2 ring-slate-400 dark:ring-white dark:ring-offset-dark-card scale-110' : 'hover:scale-105'}
                                 `}
                                 title={theme.name}
                             >
@@ -401,7 +411,7 @@ export default function Profile() {
                                 />
 
                                 {/* Active Checkmark */}
-                                {currentTheme === key && (
+                                {(currentTheme || 'blue') === key && (
                                     <CheckCircleIcon className="absolute w-6 h-6 text-white drop-shadow-md" />
                                 )}
                             </button>

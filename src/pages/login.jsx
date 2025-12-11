@@ -72,8 +72,13 @@ export default function Login() {
       const userRole = userData.role || "user";
       navigate(userRole === "admin" ? "/admin" : "/user-dashboard");
     } catch (e) {
-      console.error(e);
-      setError("Google sign-in failed. Please try again.");
+      console.error("Google Login Error:", e);
+      let msg = "Google sign-in failed. Please try again.";
+      if (e.code === 'auth/popup-closed-by-user') msg = "Sign-in cancelled.";
+      else if (e.code === 'auth/unauthorized-domain') msg = "Domain not authorized in Firebase Console.";
+      else if (e.message) msg = e.message;
+
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

@@ -2,145 +2,108 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/firebase';
 import { useAuth } from './AuthContext';
+import { THEMES } from './themes';
 
-const ThemeContext = createContext();
-
-export const THEMES = {
-    blue: {
-        name: 'Ocean Blue',
-        colors: {
-            50: '240 249 255',
-            100: '224 242 254',
-            200: '186 230 253',
-            300: '125 211 252',
-            400: '56 189 248',
-            500: '14 165 233',
-            600: '2 132 199',
-            700: '3 105 161',
-            800: '7 89 133',
-            900: '12 74 110',
-            950: '8 47 73',
-        }
-    },
-    purple: {
-        name: 'Royal Purple',
-        colors: {
-            50: '245 243 255',
-            100: '237 233 254',
-            200: '221 214 254',
-            300: '196 181 253',
-            400: '167 139 250',
-            500: '139 92 246',
-            600: '124 58 237',
-            700: '109 40 217',
-            800: '91 33 182',
-            900: '76 29 149',
-            950: '46 16 101',
-        }
-    },
-    green: {
-        name: 'Emerald Green',
-        colors: {
-            50: '236 253 245',
-            100: '209 250 229',
-            200: '167 243 208',
-            300: '110 231 183',
-            400: '52 211 153',
-            500: '16 185 129',
-            600: '5 150 105',
-            700: '4 120 87',
-            800: '6 95 70',
-            900: '6 78 59',
-            950: '2 44 34',
-        }
-    },
-    orange: {
-        name: 'Sunset Orange',
-        colors: {
-            50: '255 247 237',
-            100: '255 237 213',
-            200: '254 215 170',
-            300: '253 186 116',
-            400: '251 146 60',
-            500: '249 115 22',
-            600: '234 88 12',
-            700: '194 65 12',
-            800: '154 52 18',
-            900: '124 45 18',
-            950: '67 20 7',
-        }
-    },
-    pink: {
-        name: 'Rose Pink',
-        colors: {
-            50: '255 241 242',
-            100: '255 228 230',
-            200: '254 205 211',
-            300: '253 164 175',
-            400: '251 113 133',
-            500: '244 63 94',
-            600: '225 29 72',
-            700: '190 18 60',
-            800: '159 18 57',
-            900: '136 19 55',
-            950: '76 5 25',
-        }
-    }
+// Safe default context
+const defaultContext = {
+    theme: 'light',
+    toggleTheme: () => console.warn("toggleTheme (default)"),
+    currentTheme: 'blue',
+    changeTheme: () => console.warn("changeTheme (default)"),
+    themes: THEMES
 };
+
+// Create Context
+const ThemeContext = createContext(defaultContext);
 
 export function ThemeProvider({ children }) {
     const { currentUser } = useAuth();
-    const [currentTheme, setCurrentTheme] = useState('blue');
 
-    // Load theme from local storage initially
+    // Dark Mode State
+    const [theme, setTheme] = useState('light'); // 'light' | 'dark'
+
+    // Brand Color State
+    const [brand, setBrand] = useState('blue');
+
+    // Load Settings on Mount
     useEffect(() => {
-        const savedTheme = localStorage.getItem('theme_color');
-        if (savedTheme && THEMES[savedTheme]) {
-            applyTheme(savedTheme);
+        // Load Dark Mode
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            setTheme(savedTheme);
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            }
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            // Auto-detect system preference
+            setTheme('dark');
+            document.documentElement.classList.add('dark');
+        }
+
+        // Load Brand Color
+        const savedBrand = localStorage.getItem('theme_color');
+        if (savedBrand && THEMES[savedBrand]) {
+            applyBrand(savedBrand);
         }
     }, []);
 
-    // Sync with Firestore when user logs in
+    // Sync with Firestore
     useEffect(() => {
         if (currentUser) {
-            const fetchUserTheme = async () => {
+            const fetchSettings = async () => {
                 try {
                     const userDoc = await getDoc(doc(db, "users", currentUser.uid));
                     if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        if (userData.themeColor && THEMES[userData.themeColor]) {
-                            applyTheme(userData.themeColor);
+                        const data = userDoc.data();
+                        // Sync Brand
+                        if (data.themeColor && THEMES[data.themeColor]) {
+                            applyBrand(data.themeColor);
                         }
                     }
                 } catch (error) {
-                    console.error("Error fetching user theme:", error);
+                    console.error("Error fetching user settings:", error);
                 }
             };
-            fetchUserTheme();
+            fetchSettings();
         }
     }, [currentUser]);
 
-    const applyTheme = (themeKey) => {
-        const theme = THEMES[themeKey];
-        if (!theme) return;
+    // Toggle Dark Mode
+    const toggleTheme = () => {
+        const newTheme = theme === 'dark' ? 'light' : 'dark';
+        setTheme(newTheme);
+        localStorage.setItem('theme', newTheme);
 
-        setCurrentTheme(themeKey);
-        localStorage.setItem('theme_color', themeKey);
+        if (newTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    };
+
+    // Change Brand Color Helper
+    const applyBrand = (brandKey) => {
+        const b = THEMES[brandKey];
+        if (!b) return;
+
+        setBrand(brandKey);
+        localStorage.setItem('theme_color', brandKey);
 
         const root = document.documentElement;
-        Object.entries(theme.colors).forEach(([shade, value]) => {
+        Object.entries(b.colors).forEach(([shade, value]) => {
             root.style.setProperty(`--primary-${shade}`, value);
         });
     };
 
-    const changeTheme = async (themeKey) => {
-        applyTheme(themeKey);
+    // Exposed Change Function
+    const changeTheme = async (brandKey) => {
+        applyBrand(brandKey);
 
-        // Save to Firestore if logged in
+        // Save to Firestore
         if (currentUser) {
             try {
                 await updateDoc(doc(db, "users", currentUser.uid), {
-                    themeColor: themeKey
+                    themeColor: brandKey
                 });
             } catch (error) {
                 console.error("Error saving theme to profile:", error);
@@ -149,12 +112,20 @@ export function ThemeProvider({ children }) {
     };
 
     return (
-        <ThemeContext.Provider value={{ currentTheme, changeTheme, themes: THEMES }}>
+        <ThemeContext.Provider value={{
+            theme,
+            toggleTheme,
+            currentTheme: brand,
+            changeTheme,
+            themes: THEMES
+        }}>
             {children}
         </ThemeContext.Provider>
     );
 }
 
 export function useTheme() {
-    return useContext(ThemeContext);
+    const ctx = useContext(ThemeContext);
+    // Force fallback if context is missing/null/undefined for any reason
+    return ctx || defaultContext;
 }
