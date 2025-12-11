@@ -6,6 +6,7 @@ const EMAILS_ENABLED = false;
 
 
 export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDetails, reason = "") => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (!userEmail) return { success: false, error: "No recipient email" };
     if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "EmailJS not configured" };
 
@@ -45,7 +46,7 @@ export const sendWelcomeEmail = async (userEmail, userName) => {
     const templateParams = {
         to_email: userEmail,
         to_name: userName || "User",
-        subject: "Welcome to TimeStatic",
+        subject: "Welcome to TimeAway",
         title: "Welcome aboard!",
         message: "You have been registered. You can now log in using your Google account or Email OTP."
     };

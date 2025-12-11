@@ -20,9 +20,7 @@ export default function Login() {
 
   // Auto-Redirect if ALREADY logged in (Persistence Fix)
   React.useEffect(() => {
-    console.log("Login Page Mounted. CurrentUser:", currentUser?.uid);
     if (currentUser) {
-      console.log("Redirecting logged-in user...");
       // Fetch role to know where to send them
       const fetchRoleAndRedirect = async () => {
         try {
@@ -32,8 +30,6 @@ export default function Login() {
             const userData = snapshot.docs[0].data();
             const userRole = userData.role || "user";
             navigate(userRole === "admin" ? "/admin" : "/user-dashboard", { replace: true });
-          } else {
-            console.warn("User exists in Auth but not in DB?");
           }
         } catch (e) {
           console.error("Auto-redirect check failed", e);
@@ -188,10 +184,10 @@ export default function Login() {
         <ThemeToggle />
       </div>
       <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-8 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in transition-colors duration-200">
-        {/* TimeStatic Branding */}
+        {/* TimeAway Branding */}
         <div className="text-center mb-6">
           <h1 className="text-5xl font-heading font-black bg-gradient-to-r from-primary-600 via-secondary-600 to-primary-600 bg-clip-text text-transparent mb-1">
-            TimeStatic
+            TimeAway
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest">Leave Management System</p>
         </div>

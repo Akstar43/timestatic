@@ -38,7 +38,9 @@ export default function UserDashboard() {
   const [leaves, setLeaves] = useState([]);
   const [fromDateStr, setFromDateStr] = useState("");
   const [toDateStr, setToDateStr] = useState("");
-  const [timePeriod, setTimePeriod] = useState("Full Day"); // "Full Day" | "Morning" | "Afternoon"
+  const [timePeriod, setTimePeriod] = useState("Full Day"); // Demo for single day or legacy
+  const [startHalfType, setStartHalfType] = useState("Full Day"); // "Full Day" | "Morning" | "Afternoon"
+  const [endHalfType, setEndHalfType] = useState("Full Day"); // "Full Day" | "Morning" | "Afternoon"
   const [selectedLeaveType, setSelectedLeaveType] = useState("Deductable");
   const [leaveCategory, setLeaveCategory] = useState("Holiday");
   const [reason, setReason] = useState("");
@@ -132,30 +134,38 @@ export default function UserDashboard() {
   }
 
   // Helper: Calculate business days based on user's schedule, excluding Public Holidays
-  function calculateLeaveDuration(fromStr, toStr, isHalfDay = false) {
+  function calculateLeaveDuration(fromStr, toStr, isSingleDay, singleDayType, startType, endType) {
     const start = new Date(fromStr);
     const end = new Date(toStr);
-    let count = 0;
+    let totalDays = 0;
     let curr = new Date(start);
+
+    // Normalize dates to handle simple comparison
+    const startStr = start.toDateString();
+    const endStr = end.toDateString();
 
     while (curr <= end) {
       const dateStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
 
       // If it's NOT a non-working day AND NOT a holiday
       if (!isNonWorkingDay(curr, currentUserData) && !holidays[dateStr]) {
-        count++;
-      }
+        let dayValue = 1; // Default full day
 
+        // Logic for single day request
+        if (isSingleDay) {
+          if (singleDayType !== "Full Day") dayValue = 0.5;
+        }
+        // Logic for multi-day range
+        else {
+          if (curr.toDateString() === startStr && startType !== "Full Day") dayValue = 0.5;
+          else if (curr.toDateString() === endStr && endType !== "Full Day") dayValue = 0.5;
+        }
+
+        totalDays += dayValue;
+      }
       curr.setDate(curr.getDate() + 1);
     }
-
-    if (count === 0) return 0;
-
-    // If it's a half day request, and we found valid business days, 
-    // strictly speaking a half day is usually 0.5. 
-    // However, if the user selects a non-working day for a half day, count should be 0.
-    // If they select a single working day for half day, count is 1 * 0.5 = 0.5.
-    return isHalfDay ? 0.5 : count;
+    return totalDays;
   }
 
   // Calculate leave balance for current user
@@ -171,7 +181,9 @@ export default function UserDashboard() {
           categoryInfo?.type === "Deductable";
       })
       .reduce((sum, l) => {
-        return sum + calculateLeaveDuration(l.from, l.to, l.isHalfDay);
+        // Handle legacy and new structure
+        const isSingle = l.from === l.to;
+        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day");
       }, 0);
 
     return { total, used, remaining: total - used };
@@ -245,12 +257,12 @@ export default function UserDashboard() {
     if (!fromDateStr || !toDateStr) return toast.error("Select leave dates");
 
     const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
-    const isHalfDay = timePeriod !== "Full Day";
+    const isSingleDay = fromDateStr === toDateStr;
 
     if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
 
     // Calculate requested duration using business days logic
-    const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isHalfDay);
+    const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isSingleDay, timePeriod, startHalfType, endHalfType);
 
     if (requestedDays === 0) {
       return toast.error("Selected dates are non-working days or holidays.");
@@ -269,7 +281,8 @@ export default function UserDashboard() {
           cat?.type === "Deductable";
       })
       .reduce((sum, l) => {
-        return sum + calculateLeaveDuration(l.from, l.to, l.isHalfDay);
+        const isSingle = l.from === l.to;
+        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day");
       }, 0);
 
     const availableBalance = total - used - pendingUsage;
@@ -299,8 +312,13 @@ export default function UserDashboard() {
       type: categoryInfo.type,
       category: leaveCategory,
       reason,
-      isHalfDay,
-      halfType: isHalfDay ? timePeriod : null,
+      category: leaveCategory,
+      reason,
+      // Store relevant half-day info depending on if it's single or multi
+      isSingleDay,
+      halfType: isSingleDay ? timePeriod : null,
+      startHalfType: !isSingleDay ? startHalfType : null,
+      endHalfType: !isSingleDay ? endHalfType : null,
       status, // Pending or Rejected
       adminResponse: isAutoRejected ? adminResponse : null,
       createdAt: ts()
@@ -510,18 +528,47 @@ export default function UserDashboard() {
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Time Period</label>
-                <select
-                  className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
-                  value={timePeriod}
-                  onChange={e => setTimePeriod(e.target.value)}
-                >
-                  <option value="Full Day">Full Day</option>
-                  <option value="Morning">Start of Day (Morning)</option>
-                  <option value="Afternoon">Afternoon</option>
-                </select>
-              </div>
+              {fromDateStr && toDateStr && fromDateStr !== toDateStr ? (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Start Day Type</label>
+                    <select
+                      className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
+                      value={startHalfType}
+                      onChange={e => setStartHalfType(e.target.value)}
+                    >
+                      <option value="Full Day">Full Day</option>
+                      <option value="Morning">Start of Day (Morning)</option>
+                      <option value="Afternoon">Afternoon</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">End Day Type</label>
+                    <select
+                      className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
+                      value={endHalfType}
+                      onChange={e => setEndHalfType(e.target.value)}
+                    >
+                      <option value="Full Day">Full Day</option>
+                      <option value="Morning">Start of Day (Morning)</option>
+                      <option value="Afternoon">Afternoon</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Time Period</label>
+                  <select
+                    className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-slate-100"
+                    value={timePeriod}
+                    onChange={e => setTimePeriod(e.target.value)}
+                  >
+                    <option value="Full Day">Full Day</option>
+                    <option value="Morning">Start of Day (Morning)</option>
+                    <option value="Afternoon">Afternoon</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end">
@@ -588,14 +635,27 @@ export default function UserDashboard() {
 
           {/* Legend */}
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-dark-bg/30">
-            <div className="flex flex-wrap gap-2 sm:gap-3">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2">Leave Types:</span>
-              {Object.entries(LEAVE_CATEGORIES).map(([category, info]) => (
-                <div key={category} className="flex items-center gap-1.5 sm:gap-2">
-                  <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${info.color}`}></div>
-                  <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-300">{category}</span>
+            <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mr-2">Leave Types:</span>
+                {Object.entries(LEAVE_CATEGORIES).map(([category, info]) => (
+                  <div key={category} className="flex items-center gap-1.5 sm:gap-2">
+                    <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${info.color}`}></div>
+                    <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-300">{category}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3 items-center border-l border-slate-300 dark:border-white/10 pl-4">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Status:</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
+                  <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-300">Approved</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-4 rounded-full bg-amber-500 opacity-60 ring-2 ring-amber-400"></div>
+                  <span className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-300">Pending (You)</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -659,8 +719,18 @@ export default function UserDashboard() {
                           const isToday = date.toDateString() === new Date().toDateString();
 
                           // Only show leave colors on working days (not weekends/holidays)
+                          // Privacy: Show pending leaves only for current user, approved for everyone
                           const userLeavesOnDay = !shouldBeGrey
-                            ? leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled")
+                            ? leaves.filter(l => {
+                              if (l.userId !== user.id) return false;
+                              if (!isLeaveOnDate(l, date)) return false;
+                              if (l.status === "Rejected" || l.status === "Cancelled") return false;
+
+                              // Show pending only if it's the current user's own leave
+                              if (l.status === "Pending" && l.userId !== currentUserData?.id) return false;
+
+                              return true;
+                            })
                             : [];
 
                           const hasLeave = userLeavesOnDay.length > 0;
@@ -669,35 +739,60 @@ export default function UserDashboard() {
                           return (
                             <div key={dayIdx} className="flex justify-center">
                               {hasLeave ? (
-                                // Check if it's a half day
-                                leave.isHalfDay ? (
-                                  // Half-day: show semi-circle
-                                  <div className="relative w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 flex items-center justify-center">
-                                    {/* Background circle with gradient to create half-circle effect */}
+                                (() => {
+                                  // Determine if THIS specific day is a half day
+                                  let isDayHalf = false;
+                                  let halfType = null;
+
+                                  const dateStr = date.toDateString();
+                                  const startStr = new Date(leave.from).toDateString();
+                                  const endStr = new Date(leave.to).toDateString();
+
+                                  if (leave.isSingleDay || leave.from === leave.to) {
+                                    // Single Day Logic
+                                    if (leave.halfType && leave.halfType !== "Full Day") {
+                                      isDayHalf = true;
+                                      halfType = leave.halfType;
+                                    }
+                                  } else {
+                                    // Multi Day Logic
+                                    if (dateStr === startStr && leave.startHalfType && leave.startHalfType !== "Full Day") {
+                                      isDayHalf = true;
+                                      halfType = leave.startHalfType;
+                                    } else if (dateStr === endStr && leave.endHalfType && leave.endHalfType !== "Full Day") {
+                                      isDayHalf = true;
+                                      halfType = leave.endHalfType;
+                                    }
+                                  }
+
+                                  return isDayHalf ? (
+                                    // Partial Day Visual
+                                    <div className={`relative w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 flex items-center justify-center ${leave.status === 'Pending' ? 'ring-2 ring-dashed ring-amber-400' : ''}`}>
+                                      <div
+                                        className={`absolute inset-0 rounded-full ${getCategoryColor(leave.category)} ${leave.status === 'Pending' ? 'opacity-60' : ''}`}
+                                        style={{
+                                          clipPath: (halfType === 'Morning' || halfType === 'Start of Day (Morning)')
+                                            ? 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' // Left half
+                                            : 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' // Right half
+                                        }}
+                                      />
+                                      <span
+                                        className="relative z-10 text-[10px] sm:text-[11px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
+                                        title={`${leave.category} (${halfType})\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                      >
+                                        {date.getDate()}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    // Full Day Visual
                                     <div
-                                      className={`absolute inset-0 rounded-full ${getCategoryColor(leave.category)}`}
-                                      style={{
-                                        clipPath: leave.halfType === 'Morning'
-                                          ? 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' // Left half
-                                          : 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' // Right half
-                                      }}
-                                    />
-                                    <span
-                                      className="relative z-10 text-[10px] sm:text-[11px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
-                                      title={`${leave.category} (${leave.halfType} Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}
+                                      className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] lg:text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)} ${leave.status === 'Pending' ? 'opacity-60 ring-2 ring-amber-400 ring-offset-1' : ''}`}
+                                      title={`${leave.category}\n${leave.reason || ''}\nStatus: ${leave.status}`}
                                     >
                                       {date.getDate()}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  // Full day: show full colored circle
-                                  <div
-                                    className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] lg:text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)}`}
-                                    title={`${leave.category}\n${leave.reason || ''}\nStatus: ${leave.status}`}
-                                  >
-                                    {date.getDate()}
-                                  </div>
-                                )
+                                    </div>
+                                  );
+                                })()
                               ) : (
                                 // Regular date circle (including non-working days)
                                 <div

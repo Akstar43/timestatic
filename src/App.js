@@ -22,15 +22,22 @@ import { ThemeProvider } from "./context/ThemeContext";
 function App() {
   const [user, setUser] = useState(null);
 
-  // Request Permission on Load (for Desktop/Android)
+  // Request Permission on Load (for Desktop/Android ONLY - iOS requires user gesture)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Dynamic import to avoid circular dependencies or load issues
-        import("./services/notificationService").then(({ requestAndSaveNotificationPermission }) => {
-          requestAndSaveNotificationPermission(currentUser.uid);
-        });
+        // Detect iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+        if (!isIOS) {
+          // Safe to auto-request on Desktop/Android
+          import("./services/notificationService").then(({ requestAndSaveNotificationPermission }) => {
+            requestAndSaveNotificationPermission(currentUser.uid);
+          });
+        } else {
+          console.log("iOS detected - skipping auto-request. User must enable via Profile button.");
+        }
       }
     });
     return () => unsubscribe();

@@ -52,7 +52,9 @@ export default function Admin() {
   const [workingDays, setWorkingDays] = useState([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [timePeriod, setTimePeriod] = useState("Full Day"); // "Full Day" | "Morning" | "Afternoon"
+  const [timePeriod, setTimePeriod] = useState("Full Day"); // Demo for single day or legacy
+  const [startHalfType, setStartHalfType] = useState("Full Day");
+  const [endHalfType, setEndHalfType] = useState("Full Day");
   const [leaveType, setLeaveType] = useState("Deductable");
   const [leaveCategory, setLeaveCategory] = useState("Holiday");
   const [reason, setReason] = useState("");
@@ -66,6 +68,13 @@ export default function Admin() {
 
   // Notifications
   const [notifications, setNotifications] = useState([]);
+
+  // Year-End Reset
+  const [transferRemainingDays, setTransferRemainingDays] = useState(false);
+  const [newYearAllocation, setNewYearAllocation] = useState("");
+  const [resetTargetUser, setResetTargetUser] = useState(""); // For individual reset
+  const [individualAllocation, setIndividualAllocation] = useState("");
+  const [individualTransfer, setIndividualTransfer] = useState(false);
 
   // Deep Link Action State
   const [actionModal, setActionModal] = useState(null); // { id, action, userDetails... }
@@ -198,8 +207,27 @@ export default function Admin() {
       .reduce((sum, l) => {
         const fromDate = new Date(l.from);
         const toDate = new Date(l.to);
-        const days = Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
-        return sum + (l.isHalfDay ? 0.5 : days);
+
+        // Simple logic for admin estimation - or we can copy valid calculation logic if needed
+        // For now, let's keep it simple or implement the same logic as UserDashboard if possible.
+        // Actually, let's just do a rough count plus partials since we don't have user schedule here easily.
+        // Wait, we do have user schedule in "users" array if we looked. But for now let's use the stored fields if available.
+
+        let days = 0;
+        let curr = new Date(fromDate);
+        while (curr <= toDate) {
+          days++;
+          curr.setDate(curr.getDate() + 1);
+        }
+
+        if (l.isSingleDay || l.from === l.to) {
+          if (l.halfType && l.halfType !== "Full Day") days = 0.5;
+        } else {
+          if (l.startHalfType && l.startHalfType !== "Full Day") days -= 0.5;
+          if (l.endHalfType && l.endHalfType !== "Full Day") days -= 0.5;
+        }
+
+        return sum + days;
       }, 0);
     return (user.leaveDaysAssigned || 0) - usedLeaves;
   }
@@ -367,7 +395,7 @@ export default function Admin() {
     const userName = selectedUserObj.name || "User";
 
     try {
-      const isHalfDay = timePeriod !== "Full Day";
+      const isSingleDay = from === to;
 
       const leave = {
         userId: selectedUser,
@@ -378,8 +406,10 @@ export default function Admin() {
         category: leaveCategory,
         reason,
         status: "Pending",
-        isHalfDay,
-        halfType: isHalfDay ? timePeriod : null,
+        isSingleDay,
+        halfType: isSingleDay ? timePeriod : null,
+        startHalfType: !isSingleDay ? startHalfType : null,
+        endHalfType: !isSingleDay ? endHalfType : null,
         createdAt: ts()
       };
 
@@ -549,6 +579,96 @@ export default function Admin() {
     }
   }
 
+  // Year-End Reset Function
+  async function handleYearEndReset() {
+    if (!newYearAllocation || isNaN(newYearAllocation) || Number(newYearAllocation) < 0) {
+      return toast.error("Please enter a valid allocation for the new year");
+    }
+
+    const allocation = Number(newYearAllocation);
+
+    try {
+      const updates = users.map(async (user) => {
+        let finalAllocation = allocation;
+
+        if (transferRemainingDays) {
+          // Calculate remaining days
+          const remaining = getRemainingLeaves(user.id);
+          finalAllocation = allocation + (remaining > 0 ? remaining : 0);
+        }
+
+        // Update user's leave allocation
+        await updateDoc(doc(db, "users", user.id), {
+          leaveDaysAssigned: finalAllocation,
+          lastResetYear: new Date().getFullYear()
+        });
+
+        return { ...user, leaveDaysAssigned: finalAllocation };
+      });
+
+      await Promise.all(updates);
+
+      // Reload users to reflect changes
+      await loadUsers();
+
+      toast.success(
+        transferRemainingDays
+          ? `Year-end reset complete! ${allocation} days allocated + remaining days transferred.`
+          : `Year-end reset complete! All users allocated ${allocation} days.`
+      );
+
+      // Reset form
+      setNewYearAllocation("");
+      setTransferRemainingDays(false);
+
+    } catch (error) {
+      console.error("Year-end reset failed:", error);
+      toast.error("Failed to reset leave days");
+    }
+  }
+
+  // Individual User Reset Function
+  async function handleIndividualReset() {
+    if (!resetTargetUser) return toast.error("Please select a user");
+    if (!individualAllocation || isNaN(individualAllocation) || Number(individualAllocation) < 0) {
+      return toast.error("Please enter a valid allocation");
+    }
+
+    const allocation = Number(individualAllocation);
+    const user = users.find(u => u.id === resetTargetUser);
+    if (!user) return toast.error("User not found");
+
+    try {
+      let finalAllocation = allocation;
+
+      if (individualTransfer) {
+        const remaining = getRemainingLeaves(resetTargetUser);
+        finalAllocation = allocation + (remaining > 0 ? remaining : 0);
+      }
+
+      await updateDoc(doc(db, "users", resetTargetUser), {
+        leaveDaysAssigned: finalAllocation,
+        lastResetYear: new Date().getFullYear()
+      });
+
+      await loadUsers();
+
+      toast.success(
+        individualTransfer
+          ? `${user.name} reset! ${allocation} days + ${getRemainingLeaves(resetTargetUser)} remaining = ${finalAllocation} days.`
+          : `${user.name} reset to ${allocation} days.`
+      );
+
+      setResetTargetUser("");
+      setIndividualAllocation("");
+      setIndividualTransfer(false);
+
+    } catch (error) {
+      console.error("Individual reset failed:", error);
+      toast.error("Failed to reset user");
+    }
+  }
+
 
   const remainingLeaves = selectedUser ? getRemainingLeaves(selectedUser) : "-";
 
@@ -664,6 +784,7 @@ export default function Admin() {
           <SidebarItem id="usersOrgs" icon={UsersIcon} label="Users & Organizations" />
           <SidebarItem id="leaveMgmt" icon={CalendarDaysIcon} label="Leave Management" />
           <SidebarItem id="holidays" icon={GlobeAmericasIcon} label="Public Holidays" />
+          <SidebarItem id="yearEndReset" icon={CalendarDaysIcon} label="Year-End Reset" />
           <SidebarItem id="notificationsTab" icon={BellIcon} label="Notifications" />
         </nav>
 
@@ -969,18 +1090,47 @@ export default function Admin() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1 ml-1">Time Period</label>
-                      <select
-                        className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
-                        value={timePeriod}
-                        onChange={e => setTimePeriod(e.target.value)}
-                      >
-                        <option value="Full Day">Full Day</option>
-                        <option value="Morning">Start of Day (Morning)</option>
-                        <option value="Afternoon">Afternoon</option>
-                      </select>
-                    </div>
+                    {from && to && from !== to ? (
+                      <>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">Start Day Type</label>
+                          <select
+                            className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-white"
+                            value={startHalfType}
+                            onChange={e => setStartHalfType(e.target.value)}
+                          >
+                            <option value="Full Day">Full Day</option>
+                            <option value="Morning">Start of Day (Morning)</option>
+                            <option value="Afternoon">Afternoon</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 dark:text-slate-400 ml-1">End Day Type</label>
+                          <select
+                            className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm text-slate-900 dark:text-white"
+                            value={endHalfType}
+                            onChange={e => setEndHalfType(e.target.value)}
+                          >
+                            <option value="Full Day">Full Day</option>
+                            <option value="Morning">Start of Day (Morning)</option>
+                            <option value="Afternoon">Afternoon</option>
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1 ml-1">Time Period</label>
+                        <select
+                          className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
+                          value={timePeriod}
+                          onChange={e => setTimePeriod(e.target.value)}
+                        >
+                          <option value="Full Day">Full Day</option>
+                          <option value="Morning">Start of Day (Morning)</option>
+                          <option value="Afternoon">Afternoon</option>
+                        </select>
+                      </div>
+                    )}
 
                     <textarea
                       className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all h-24 resize-none text-slate-900 dark:text-white"
@@ -1166,6 +1316,137 @@ export default function Admin() {
             </div>
           )}
 
+
+          {/* Year-End Reset Tab */}
+          {tab === "yearEndReset" && (
+            <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
+                {/* Bulk Reset Card */}
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
+                    <CalendarDaysIcon className="h-5 w-5 text-primary-400" />
+                    Reset All Users
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        New Year Allocation (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
+                        placeholder="e.g., 20"
+                        value={newYearAllocation}
+                        onChange={(e) => setNewYearAllocation(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-primary-50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-500/20 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="bulkTransferDays"
+                        checked={transferRemainingDays}
+                        onChange={(e) => setTransferRemainingDays(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
+                      />
+                      <label htmlFor="bulkTransferDays" className="flex-1 cursor-pointer">
+                        <span className="block text-sm font-medium text-slate-900 dark:text-white">
+                          Transfer Remaining Days
+                        </span>
+                        <span className="block text-xs text-slate-600 dark:text-slate-400 mt-1">
+                          Add unused leave days to new allocation
+                        </span>
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={handleYearEndReset}
+                      className="w-full bg-primary-600 hover:bg-primary-500 text-white py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20"
+                    >
+                      Reset All Users
+                    </button>
+                  </div>
+                </div>
+
+                {/* Individual Reset Card */}
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
+                    <UsersIcon className="h-5 w-5 text-secondary-400" />
+                    Reset Individual User
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Select User
+                      </label>
+                      <select
+                        className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
+                        value={resetTargetUser}
+                        onChange={(e) => setResetTargetUser(e.target.value)}
+                      >
+                        <option value="">Select User</option>
+                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        New Allocation (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
+                        placeholder="e.g., 20"
+                        value={individualAllocation}
+                        onChange={(e) => setIndividualAllocation(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-secondary-50 dark:bg-secondary-900/10 border border-secondary-200 dark:border-secondary-500/20 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="individualTransferDays"
+                        checked={individualTransfer}
+                        onChange={(e) => setIndividualTransfer(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-secondary-600 border-slate-300 rounded focus:ring-secondary-500"
+                      />
+                      <label htmlFor="individualTransferDays" className="flex-1 cursor-pointer">
+                        <span className="block text-sm font-medium text-slate-900 dark:text-white">
+                          Transfer Remaining Days
+                        </span>
+                        <span className="block text-xs text-slate-600 dark:text-slate-400 mt-1">
+                          Add unused days to new allocation
+                        </span>
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={handleIndividualReset}
+                      className="w-full bg-secondary-600 hover:bg-secondary-500 text-white py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20"
+                    >
+                      Reset User
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Card */}
+              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-6">
+                <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2">
+                  ⚠️ Important Information
+                </h3>
+                <ul className="text-xs text-amber-800 dark:text-amber-300 space-y-1 list-disc list-inside">
+                  <li>Bulk reset updates <strong>all users</strong> at once</li>
+                  <li>Individual reset allows you to reset specific users one at a time</li>
+                  <li>Transfer option adds remaining days to the new allocation</li>
+                  <li>Without transfer, unused days will be lost</li>
+                  <li>Reset year is tracked in user profiles</li>
+                </ul>
+              </div>
+            </div>
+          )}
 
           {/* Notifications Tab */}
           {tab === "notificationsTab" && (
