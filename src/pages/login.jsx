@@ -6,15 +6,40 @@ import { collection, getDocs, query, where, doc, updateDoc } from "firebase/fire
 import { db, googleProvider } from "../firebase/firebase";
 import { signInWithPopup, signInAnonymously, getAuth } from "firebase/auth";
 import { sendOTPEmail } from "../services/emailService";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth(); // Get current auth state
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [showOTPInput, setShowOTPInput] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-Redirect if ALREADY logged in (Persistence Fix)
+  React.useEffect(() => {
+    if (currentUser) {
+      // Fetch role to know where to send them
+      const fetchRoleAndRedirect = async () => {
+        try {
+          const q = query(collection(db, "users"), where("uid", "==", currentUser.uid));
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            const userData = snapshot.docs[0].data();
+            const userRole = userData.role || "user";
+            navigate(userRole === "admin" ? "/admin" : "/user-dashboard", { replace: true });
+          } else {
+            // User auth exists but db record missing? weird. maybe let them login again.
+          }
+        } catch (e) {
+          console.error("Auto-redirect check failed", e);
+        }
+      };
+      fetchRoleAndRedirect();
+    }
+  }, [currentUser, navigate]);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
