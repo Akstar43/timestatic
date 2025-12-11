@@ -12,7 +12,8 @@ import {
   ArrowRightOnRectangleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  PlusCircleIcon
+  PlusCircleIcon,
+  Cog6ToothIcon
 } from "@heroicons/react/24/outline";
 import ThemeToggle from "../components/ThemeToggle";
 import { sendNewLeaveRequestEmail, sendLeaveStatusEmail } from "../services/emailService";
@@ -356,9 +357,11 @@ export default function UserDashboard() {
           {currentUserData?.role === 'admin' && (
             <button
               onClick={() => navigate('/admin')}
-              className="bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 px-4 py-2 rounded-lg text-sm font-medium transition-colors hidden sm:block"
+              className="flex items-center gap-2 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              title="Switch to Admin View"
             >
-              Switch to Admin View
+              <Cog6ToothIcon className="h-5 w-5" />
+              <span className="hidden sm:inline">Admin View</span>
             </button>
           )}
           <button
@@ -525,32 +528,45 @@ export default function UserDashboard() {
 
         {/* Weekly Calendar */}
         <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
-          <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
-            <div className="flex items-center gap-3">
+          <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5">
+            {/* Header with icon and title */}
+            <div className="flex items-center gap-3 mb-3 sm:mb-4">
               <div className="p-2 bg-secondary-500/10 rounded-lg">
                 <CalendarDaysIcon className="h-5 w-5 sm:h-6 sm:w-6 text-secondary-400" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h2 className="text-lg sm:text-xl font-heading font-semibold text-slate-900 dark:text-white">Team Leave Calendar</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Week of {formatDateShort(weekDates[0])} - {formatDateShort(weekDates[6])}
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {formatDateShort(weekDates[0])} - {formatDateShort(weekDates[6])}
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+
+            {/* Navigation buttons */}
+            <div className="flex gap-2 justify-center sm:justify-end">
               <button
-                className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors text-slate-600 dark:text-slate-300 font-medium text-sm"
                 onClick={prevWeek}
                 title="Previous Week"
               >
-                <ChevronLeftIcon className="h-5 w-5" />
+                <ChevronLeftIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden xs:inline">Prev</span>
               </button>
               <button
-                className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-medium text-sm shadow-sm"
+                onClick={() => setSelectedWeek(getMonday(new Date()))}
+                title="Jump to Current Week"
+              >
+                <CalendarDaysIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span>Today</span>
+              </button>
+              <button
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors text-slate-600 dark:text-slate-300 font-medium text-sm"
                 onClick={nextWeek}
                 title="Next Week"
               >
-                <ChevronRightIcon className="h-5 w-5" />
+                <span className="hidden xs:inline">Next</span>
+                <ChevronRightIcon className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           </div>
@@ -619,13 +635,16 @@ export default function UserDashboard() {
 
                       {/* Date cells as circles */}
                       {weekDates.map((date, dayIdx) => {
-                        const userLeavesOnDay = leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled");
                         const holiday = getHoliday(date);
                         const isNonWorking = isNonWorkingDay(date, user);
                         const shouldBeGrey = holiday || isNonWorking;
                         const isToday = date.toDateString() === new Date().toDateString();
 
-                        // Check if this is part of a multi-day leave span
+                        // Only show leave colors on working days (not weekends/holidays)
+                        const userLeavesOnDay = !shouldBeGrey
+                          ? leaves.filter(l => l.userId === user.id && isLeaveOnDate(l, date) && l.status !== "Rejected" && l.status !== "Cancelled")
+                          : [];
+
                         const hasLeave = userLeavesOnDay.length > 0;
                         const leave = userLeavesOnDay[0]; // Take first leave if multiple
 
@@ -662,13 +681,14 @@ export default function UserDashboard() {
                                 </div>
                               )
                             ) : (
-                              // Regular date circle
+                              // Regular date circle (including non-working days)
                               <div
                                 className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[11px] sm:text-xs lg:text-sm font-medium transition-all
                                   ${shouldBeGrey
                                     ? 'text-slate-300 dark:text-slate-600'
                                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                                   }`}
+                                title={holiday ? `Holiday: ${holiday}` : (isNonWorking ? 'Non-working day' : '')}
                               >
                                 {date.getDate()}
                               </div>

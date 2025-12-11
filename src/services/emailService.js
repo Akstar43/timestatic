@@ -1,8 +1,12 @@
 import emailjs from '@emailjs/browser';
 import { EMAILJS_CONFIG } from '../config/emailConfig';
 
+// ⚠️ FEATURE FLAG: Set to false to disable all emails (for testing)
+const EMAILS_ENABLED = false;
+
 
 export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDetails, reason = "") => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (!userEmail) return { success: false, error: "No recipient email" };
     if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "EmailJS not configured" };
 
@@ -35,6 +39,7 @@ export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDet
 };
 
 export const sendWelcomeEmail = async (userEmail, userName) => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (!userEmail) return { success: false, error: "No email" };
     if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
 
@@ -57,6 +62,7 @@ export const sendWelcomeEmail = async (userEmail, userName) => {
 };
 
 export const sendNewLeaveRequestEmail = async (leaveDetails, userName) => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
 
     const origin = window.location.origin;
@@ -86,6 +92,7 @@ export const sendNewLeaveRequestEmail = async (leaveDetails, userName) => {
 };
 
 export const sendOTPEmail = async (userEmail, otp, userName) => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
 
     const templateParams = {
@@ -107,6 +114,7 @@ export const sendOTPEmail = async (userEmail, otp, userName) => {
 };
 
 export const sendLeaveCancellationEmail = async (leaveDetails, userName) => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
 
     const messageBody = `${userName} has cancelled their leave (${leaveDetails?.category}, ${leaveDetails?.from} to ${leaveDetails?.to}).`;
