@@ -18,10 +18,12 @@ import {
 import toast, { Toaster } from "react-hot-toast";
 import ThemeToggle from "../components/ThemeToggle";
 import { LEAVE_CATEGORIES } from "../context/leavetypes";
+import { useTheme } from "../context/ThemeContext";
 
 export default function Profile() {
     const auth = getAuth();
     const navigate = useNavigate();
+    const { currentTheme, changeTheme, themes } = useTheme();
     const currentUserId = auth.currentUser?.uid;
 
     const [userData, setUserData] = useState(null);
@@ -374,6 +376,40 @@ export default function Profile() {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                {/* Personalize Card */}
+                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden p-6 transition-colors duration-200">
+                    <h3 className="text-lg font-heading font-semibold text-slate-900 dark:text-white mb-4">
+                        Personalize Look
+                    </h3>
+                    <div className="flex gap-4 flex-wrap">
+                        {Object.entries(themes).map(([key, theme]) => (
+                            <button
+                                key={key}
+                                onClick={() => changeTheme(key)}
+                                className={`
+                                    group relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200
+                                    ${currentTheme === key ? 'ring-2 ring-offset-2 ring-slate-400 dark:ring-white dark:ring-offset-dark-card scale-110' : 'hover:scale-105'}
+                                `}
+                                title={theme.name}
+                            >
+                                {/* Color Preview Circle */}
+                                <div
+                                    className="w-full h-full rounded-full shadow-inner"
+                                    style={{ backgroundColor: `rgb(${theme.colors[500]})` }}
+                                />
+
+                                {/* Active Checkmark */}
+                                {currentTheme === key && (
+                                    <CheckCircleIcon className="absolute w-6 h-6 text-white drop-shadow-md" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                    <p className="text-sm text-slate-500 mt-3">
+                        Select your favorite accent color for buttons and highlights.
+                    </p>
                 </div>
 
                 {/* Leave Statistics */}
