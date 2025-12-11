@@ -119,13 +119,7 @@ export default function UserDashboard() {
     }
   }
 
-  // Helper: Check if a date is a weekend (Sat/Sun)
-  function isWeekend(date) {
-    const day = date.getDay();
-    return day === 0 || day === 6;
-  }
-
-  // Helper: Calculate standard business days (Mon-Fri) excluding Public Holidays
+  // Helper: Calculate business days based on user's schedule, excluding Public Holidays
   function calculateLeaveDuration(fromStr, toStr, isHalfDay = false) {
     const start = new Date(fromStr);
     const end = new Date(toStr);
@@ -135,8 +129,8 @@ export default function UserDashboard() {
     while (curr <= end) {
       const dateStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
 
-      // If it's NOT a weekend AND NOT a holiday
-      if (!isWeekend(curr) && !holidays[dateStr]) {
+      // If it's NOT a non-working day AND NOT a holiday
+      if (!isNonWorkingDay(curr, currentUserData) && !holidays[dateStr]) {
         count++;
       }
 
@@ -147,8 +141,8 @@ export default function UserDashboard() {
 
     // If it's a half day request, and we found valid business days, 
     // strictly speaking a half day is usually 0.5. 
-    // However, if the user selects a weekend for a half day, count should be 0.
-    // If they select a single weekday for half day, count is 1 * 0.5 = 0.5.
+    // However, if the user selects a non-working day for a half day, count should be 0.
+    // If they select a single working day for half day, count is 1 * 0.5 = 0.5.
     return isHalfDay ? 0.5 : count;
   }
 
@@ -247,7 +241,7 @@ export default function UserDashboard() {
     const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isHalfDay);
 
     if (requestedDays === 0) {
-      return toast.error("Selected dates are non-working days (Weekends/Holidays).");
+      return toast.error("Selected dates are non-working days or holidays.");
     }
 
     // Get current balance
@@ -577,10 +571,10 @@ export default function UserDashboard() {
           {/* Calendar grid */}
           <div className="overflow-x-auto -mx-4 sm:mx-0 pb-4">
             <div className="px-4 sm:px-0">
-              <div className="min-w-[900px] bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden p-6">
+              <div className="min-w-[600px] sm:min-w-[750px] lg:min-w-0 bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden p-3 sm:p-6">
 
                 {/* Day headers - just the letters */}
-                <div className="grid grid-cols-[180px_repeat(7,1fr)] gap-2 mb-4">
+                <div className="grid grid-cols-[100px_repeat(7,1fr)] sm:grid-cols-[140px_repeat(7,1fr)] lg:grid-cols-[180px_repeat(7,1fr)] gap-1 sm:gap-2 mb-3 sm:mb-4">
                   <div></div>
                   {DAYS.map((day, idx) => {
                     const date = weekDates[idx];
@@ -588,7 +582,7 @@ export default function UserDashboard() {
 
                     return (
                       <div key={idx} className="text-center flex justify-center">
-                        <span className={`text-xs font-bold uppercase w-6 h-6 rounded-full flex items-center justify-center transition-all
+                        <span className={`text-[10px] sm:text-xs font-bold uppercase w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center transition-all
                           ${isToday
                             ? 'ring-2 ring-primary-600 text-primary-600 dark:text-primary-400 dark:ring-primary-500'
                             : 'text-slate-400 dark:text-slate-500'
@@ -601,25 +595,25 @@ export default function UserDashboard() {
                 </div>
 
                 {/* User rows */}
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {users.length > 0 ? users.map(user => (
-                    <div key={user.id} className="grid grid-cols-[180px_repeat(7,1fr)] gap-2 items-center">
+                    <div key={user.id} className="grid grid-cols-[100px_repeat(7,1fr)] sm:grid-cols-[140px_repeat(7,1fr)] lg:grid-cols-[180px_repeat(7,1fr)] gap-1 sm:gap-2 items-center">
                       {/* User info */}
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-white/10">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="relative flex-shrink-0">
+                          <div className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 dark:ring-white/10">
                             {user.photoURL ? (
                               <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
-                                <span className="text-slate-600 dark:text-slate-300 font-bold text-sm">{user.name?.charAt(0) || 'U'}</span>
+                                <span className="text-slate-600 dark:text-slate-300 font-bold text-[10px] sm:text-xs lg:text-sm">{user.name?.charAt(0) || 'U'}</span>
                               </div>
                             )}
                           </div>
                         </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.name || 'Unknown'}</div>
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{user.email?.split('@')[0]}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] sm:text-xs lg:text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.name || 'Unknown'}</div>
+                          <div className="text-[9px] sm:text-[10px] lg:text-[11px] text-slate-400 dark:text-slate-500 truncate hidden sm:block">{user.email?.split('@')[0]}</div>
                         </div>
                       </div>
 
@@ -641,7 +635,7 @@ export default function UserDashboard() {
                               // Check if it's a half day
                               leave.isHalfDay ? (
                                 // Half-day: show semi-circle
-                                <div className="relative w-9 h-9 flex items-center justify-center">
+                                <div className="relative w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 flex items-center justify-center">
                                   {/* Background circle with gradient to create half-circle effect */}
                                   <div
                                     className={`absolute inset-0 rounded-full ${getCategoryColor(leave.category)}`}
@@ -652,7 +646,7 @@ export default function UserDashboard() {
                                     }}
                                   />
                                   <span
-                                    className="relative z-10 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
+                                    className="relative z-10 text-[10px] sm:text-[11px] lg:text-xs font-bold text-slate-700 dark:text-slate-300 cursor-help"
                                     title={`${leave.category} (${leave.halfType} Half)\n${leave.reason || ''}\nStatus: ${leave.status}`}
                                   >
                                     {date.getDate()}
@@ -661,7 +655,7 @@ export default function UserDashboard() {
                               ) : (
                                 // Full day: show full colored circle
                                 <div
-                                  className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)}`}
+                                  className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] lg:text-xs font-bold text-white shadow-sm cursor-help transition-transform hover:scale-110 ${getCategoryColor(leave.category)}`}
                                   title={`${leave.category}\n${leave.reason || ''}\nStatus: ${leave.status}`}
                                 >
                                   {date.getDate()}
@@ -670,7 +664,7 @@ export default function UserDashboard() {
                             ) : (
                               // Regular date circle
                               <div
-                                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium transition-all
+                                className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full flex items-center justify-center text-[11px] sm:text-xs lg:text-sm font-medium transition-all
                                   ${shouldBeGrey
                                     ? 'text-slate-300 dark:text-slate-600'
                                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'

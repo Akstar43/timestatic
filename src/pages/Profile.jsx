@@ -160,13 +160,20 @@ export default function Profile() {
         }
     }
 
-    // Helper function to check if a date is a weekend
-    function isWeekend(date) {
-        const day = date.getDay();
-        return day === 0 || day === 6; // Sunday or Saturday
-    }
+    // Helper to check if a date is a non-working day (based on user's working days config)
+    const isNonWorkingDay = (date, user) => {
+        if (!user || !user.workingDays || user.workingDays.length === 0) {
+            // Default: Saturday and Sunday are non-working
+            const dayOfWeek = date.getDay();
+            return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+        }
 
-    // Helper to calculate business days (excluding weekends and holidays)
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const dayName = dayNames[date.getDay()];
+        return !user.workingDays.includes(dayName);
+    };
+
+    // Helper to calculate business days (excluding non-working days and holidays)
     function calculateLeaveDuration(fromStr, toStr, isHalfDay = false) {
         const start = new Date(fromStr);
         const end = new Date(toStr);
@@ -176,8 +183,8 @@ export default function Profile() {
         while (curr <= end) {
             const dateStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
 
-            // Only count if it's NOT a weekend AND NOT a holiday
-            if (!isWeekend(curr) && !holidays[dateStr]) {
+            // Only count if it's NOT a non-working day AND NOT a holiday
+            if (!isNonWorkingDay(curr, userData) && !holidays[dateStr]) {
                 count++;
             }
             curr.setDate(curr.getDate() + 1);
@@ -195,13 +202,6 @@ export default function Profile() {
         // Filter leaves for THIS user by Firestore document ID (not Auth UID)
         // Match UserDashboard logic exactly
         const userLeaves = leaves.filter(l => l.userId === userData.id);
-
-        // DEBUG
-        console.log("📊 Profile Leave Stats Debug:");
-        console.log("  userData.id:", userData.id);
-        console.log("  Total leaves:", leaves.length);
-        console.log("  User leaves:", userLeaves.length);
-        console.log("  User leaves detail:", userLeaves);
 
         // Count approved deductable leave days (business days only)
         const used = userLeaves
