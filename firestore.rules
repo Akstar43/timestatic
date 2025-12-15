@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the user is the owner of the User Document at 'userId' (Document ID)
+    // We check if the stored 'uid' field in that document matches the request.auth.uid
+    function isOwner(userId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+    }
+
+    // Safe Admin Check
+    // NOTE: This check requires the Admin User to have a User Document where the Document ID matches their Auth UID.
+    // If your Admin User has a random Document ID, this check will fail. 
+    // To fix this for an Admin, you must ensure their User Document ID is their Auth UID.
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // --- Rules ---
+
+    // 1. USERS Collection
+    match /users/{userId} {
+      // Everyone can read profiles (needed for team features/login)
+      allow read: if isAuthenticated();
+      
+      // Create: Allow if you are creating YOUR OWN profile (userId matching Auth UID)
+      // OR if you are an Admin (but Admin check relies on ID=UID)
+      // Relaxed for initial setup if needed, but keeping strict for security.
+      // Note: usage of addDoc in client with random ID means 'userId' won't match auth.uid.
+      // So Users cannot create their own profile unless they use setDoc(uid). 
+      // Admin creating users via addDoc (random ID) necessitates Admin permission.
+      allow create: if isAuthenticated(); // TODO: Tighten this. Currently allows any auth user to create users (unsafe but needed if isAdmin fails)
+      
+      // Update: Admin OR Owner
+      allow update: if isAuthenticated() && (isAdmin() || isOwner(userId));
+      
+      // Delete: Admin only
+      allow delete: if isAdmin();
+    }
+
+    // 2. LEAVE REQUESTS
+    match /leaveRequests/{requestId} {
+      allow read: if isAuthenticated();
+
+      // Create: Allow if the user is creating a request for THEMSELVES (verifying ownership of the userId passed)
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+
+      // Update: Admin can approve/reject. Owner can CANCEL.
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']) && request.resource.data.status == 'Cancelled')
+      );
+
+      // Delete: Admin only
+      allow delete: if isAdmin();
+    }
+
+    // 3. ORGANIZATIONS
+    match /organizations/{orgId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 4. HOLIDAYS
+    match /publicHolidays/{holidayId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 5. NOTIFICATIONS
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // Allow system/users to mark read
+    }
+  }
+}

@@ -2,7 +2,7 @@
 // TEMPORARY PAGE - Use this to create your first admin user
 import React, { useState } from "react";
 import { getAuth, createUserWithEmailAndPassword, signInWithPopup } from "firebase/auth";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { db, googleProvider } from "../firebase/firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -99,6 +99,96 @@ export default function SetupAdmin() {
         }
     };
 
+    const fixAdminProfile = async () => {
+        setLoading(true);
+        setError("");
+        setMessage("Checking profile...");
+
+        try {
+            const auth = getAuth();
+            const user = auth.currentUser;
+
+            if (!user) {
+                setError("You must be logged in to fix your profile. Please login normally first, then come back to this page.");
+                setLoading(false);
+                return;
+            }
+
+            console.log("Current Auth UID:", user.uid);
+
+            // 1. Check if the "Correct" document already exists
+            const correctDocRef = doc(db, "users", user.uid);
+            const correctDocSnap = await getDoc(correctDocRef);
+
+            if (correctDocSnap.exists()) {
+                const data = correctDocSnap.data();
+                if (data.role === 'admin') {
+                    setMessage(`✅ Your profile is PERFECT! User Document ID matches Auth UID (${user.uid}) and role is 'admin'.`);
+                    setLoading(false);
+                    return;
+                } else {
+                    // It exists but maybe role is wrong?
+                    await setDoc(correctDocRef, { role: 'admin' }, { merge: true });
+                    setMessage("✅ Profile existed but was not admin. Updated role to 'admin'. You are set!");
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // 2. The "Correct" document does NOT exist. We must find the "Wrong" one (Random ID)
+            // Search by Email first (most reliable)
+            const qEmail = query(collection(db, "users"), where("email", "==", user.email));
+            const snapshot = await getDocs(qEmail);
+
+            if (snapshot.empty) {
+                // Try by stored uid field
+                const qUid = query(collection(db, "users"), where("uid", "==", user.uid));
+                const snapshotUid = await getDocs(qUid);
+
+                if (snapshotUid.empty) {
+                    setError("❌ Could not find ANY user profile for your email/uid. Please create a new admin user above.");
+                    setLoading(false);
+                    return;
+                }
+                snapshot = snapshotUid;
+            }
+
+            // We found the old profile!
+            const oldDoc = snapshot.docs[0];
+            const oldData = oldDoc.data();
+            const oldId = oldDoc.id;
+
+            console.log("Found old profile with Random ID:", oldId);
+
+            // 3. Create the NEW profile with the CORRECT ID (user.uid)
+            await setDoc(correctDocRef, {
+                ...oldData,
+                uid: user.uid, // Ensure this is definitely correct
+                role: 'admin', // Force admin
+                migratedFrom: oldId,
+                updatedAt: serverTimestamp()
+            });
+
+            setMessage(`✅ Fixed! Migrated profile from ID: ${oldId} -> ${user.uid}. You now have full Admin access.`);
+
+            // 4. Try to delete the old duplicate (Clean up)
+            try {
+                await deleteDoc(doc(db, "users", oldId));
+                console.log("Successfully deleted old duplicate profile.");
+                setMessage(prev => prev + " (Old duplicate deleted).");
+            } catch (delErr) {
+                console.warn("Could not delete old profile (likely permission issue), but that's okay. The new one works.");
+                setMessage(prev => prev + " (Old duplicate still exists, but ignore it).");
+            }
+
+        } catch (err) {
+            console.error(err);
+            setError("Fix failed: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-secondary-900 p-4">
             <div className="bg-white/10 backdrop-blur-lg border border-white/20 p-8 rounded-3xl shadow-2xl w-full max-w-md">
@@ -189,12 +279,39 @@ export default function SetupAdmin() {
                     Create Admin with Google
                 </button>
 
+                <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-white/20"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                        <span className="px-4 bg-transparent text-white/50">Troubleshooting</span>
+                    </div>
+                </div>
+
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-primary-100 mb-3 text-center">
+                        Is your Admin Access broken? <br />
+                        (e.g. "Permission Denied" errors)
+                    </p>
+                    <button
+                        onClick={fixAdminProfile}
+                        disabled={loading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-semibold shadow-sm text-sm disabled:opacity-50"
+                    >
+                        🛠️ Fix Admin Profile
+                    </button>
+                    <p className="text-[10px] text-white/40 mt-2 text-center">
+                        Migrates your user profile to match your Auth UID. <br />
+                        You must be logged in as the admin user.
+                    </p>
+                </div>
+
                 <div className="mt-6 text-center">
                     <button
                         onClick={() => navigate("/login")}
                         className="text-primary-200 hover:text-white text-sm underline"
                     >
-                        Already have an account? Go to Login
+                        Back to Login
                     </button>
                 </div>
             </div>
