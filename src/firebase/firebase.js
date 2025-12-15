@@ -1,7 +1,7 @@
 // src/firebase/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
-import { getFirestore, serverTimestamp } from "firebase/firestore";
+import { serverTimestamp, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
 
@@ -19,7 +19,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Enforce Local Persistence (Keeps user logged in even after closing PWA)
+// Enforce Local Persistence
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
     // Persistence set successfully
@@ -28,7 +28,12 @@ setPersistence(auth, browserLocalPersistence)
     console.error("Firebase Persistence Error:", error);
   });
 
-export const db = getFirestore(app);        // Firestore database
+// Initialize Firestore with Persistence Settings
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
 export const storage = getStorage(app);     // Firebase Storage
 export const messaging = getMessaging(app); // Firebase Messaging
 export const googleProvider = new GoogleAuthProvider(); // Google Auth Provider

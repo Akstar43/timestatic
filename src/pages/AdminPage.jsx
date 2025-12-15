@@ -18,7 +18,8 @@ import {
   ArrowRightOnRectangleIcon,
   Bars3Icon,
   XMarkIcon,
-  GlobeAmericasIcon
+  GlobeAmericasIcon,
+  ClipboardDocumentListIcon
 } from "@heroicons/react/24/outline";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
@@ -142,19 +143,25 @@ export default function Admin() {
   const { org } = useOrganization();
   const orgId = org?.id;
 
+  // SUPER ADMIN CHECK
+  const isSuperAdmin = auth.currentUser?.email === "akmusajee53@gmail.com";
+
+  // Super Admin Filter State
+  const [filterOrgId, setFilterOrgId] = useState("ALL");
+
   // ----- Load data -----
   useEffect(() => {
-    if (orgId) {
+    // Load data if we have an Org ID OR if we are Super Admin
+    if (orgId || isSuperAdmin) {
+      loadOrgs();
       loadUsers();
-      // loadOrgs(); // No longer needed for single-tenant view, or restricts to just THIS org
       loadLeaves();
       loadNotifications();
       loadHolidays();
     }
-  }, [orgId]);
+  }, [orgId, isSuperAdmin, filterOrgId]); // Reload when filter changes
 
   // Auto-update leave type when category changes
-  // When leave type changes, default the category to the first valid option
   useEffect(() => {
     const validCategories = Object.keys(LEAVE_CATEGORIES).filter(cat => LEAVE_CATEGORIES[cat].type === leaveType);
     if (validCategories.length > 0 && (!LEAVE_CATEGORIES[leaveCategory] || LEAVE_CATEGORIES[leaveCategory].type !== leaveType)) {
@@ -162,10 +169,30 @@ export default function Admin() {
     }
   }, [leaveType]);
 
+  // Sync working days when user is selected
+  useEffect(() => {
+    if (selectedUser) {
+      const user = users.find(u => u.id === selectedUser);
+      // Default to empty array if undefined
+      setWorkingDays(user?.workingDays || []);
+    } else {
+      setWorkingDays([]);
+    }
+  }, [selectedUser, users]);
+
   async function loadUsers() {
     try {
-      // Filter users by Organization
-      const q = query(collection(db, "users"), where("orgId", "==", orgId));
+      let q;
+      if (isSuperAdmin) {
+        if (filterOrgId !== "ALL") {
+          q = query(collection(db, "users"), where("orgId", "==", filterOrgId));
+        } else {
+          q = query(collection(db, "users")); // Fetch ALL users
+        }
+      } else {
+        q = query(collection(db, "users"), where("orgId", "==", orgId));
+      }
+
       const snapshot = await getDocs(q);
       setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
@@ -174,42 +201,62 @@ export default function Admin() {
     }
   }
 
-  // Legacy/SuperAdmin function - maybe disable for normal admins?
   async function loadOrgs() {
-    // For now, let's just show the current org
-    if (org) {
-      setOrgs([org]);
+    try {
+      if (isSuperAdmin) {
+        const snapshot = await getDocs(collection(db, "organizations"));
+        setOrgs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      } else if (org) {
+        setOrgs([org]);
+      }
+    } catch (e) {
+      console.error("Failed to load orgs", e);
     }
   }
 
   async function loadLeaves() {
     try {
-      // Filter leaves by Organization (if we added orgId to leaves - which we haven't yet, but we will!)
-      // For Phase 1 (Migration), we might not have orgId on leaves yet.
-      // Ideally, we query leaves where 'userId' is in our list of users.
-      // BUT Firestore 'in' query is limited to 10.
+      let q;
+      // Ideally we should have orgId on leaves. For now, if Super Admin, fetch all.
+      // If we filtered by Org, we need to filter client side if orgId is missing on older docs,
+      // or use where() if we added orgId to leaves. We did add orgId in bookLeave!
 
-      // OPTION: Fetch ALL leaves and filter client side (OK for MVP).
-      // OPTION B: Add orgId to leaves (Better). Let's assume we do B in the "bookLeave" function.
+      if (isSuperAdmin) {
+        if (filterOrgId !== "ALL") {
+          q = query(collection(db, "leaveRequests"), where("orgId", "==", filterOrgId));
+        } else {
+          q = collection(db, "leaveRequests");
+        }
+      } else {
+        q = query(collection(db, "leaveRequests"), where("orgId", "==", orgId));
+      }
 
-      // Let's try Query by OrgID first. If empty, maybe fallback or just show nothing until new leaves created.
-      // Actually for legacy compatibility, let's fetch all and filter client side if orgId missing.
-      // But for Security, we should eventually query.
-
-      const q = query(collection(db, "leaveRequests"), where("orgId", "==", orgId));
       const snapshot = await getDocs(q);
-      setLeaveRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch {
-      toast.error("Failed to load leave requests");
+      setLeaveRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))); // Fix: variable name was leaveRequests, function calls it leaveRequests
+    } catch (e) {
+      console.error("Failed to load leaves", e);
+      // toast.error("Failed to load leave requests");
     }
   }
 
+  // Wrapper for setLeaveRequests to match variable name above if needed, 
+  // but better to just fix the load function to set the state directly.
+  // Re-writing loadLeaves to strictly match state variable:
+
+  /* RE-IMPLEMENTING loadLeaves CORRECTLY */
+
   async function loadNotifications() {
     try {
-      const q = query(collection(db, "notifications"), where("orgId", "==", orgId));
-      const snapshot = await getDocs(q);
-      const notifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setNotifications(notifs);
+      if (isSuperAdmin && filterOrgId === "ALL") {
+        const snapshot = await getDocs(collection(db, "notifications"));
+        setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      } else {
+        const targetOrg = isSuperAdmin ? filterOrgId : orgId;
+        if (!targetOrg) return;
+        const q = query(collection(db, "notifications"), where("orgId", "==", targetOrg));
+        const snapshot = await getDocs(q);
+        setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
     } catch {
       toast.error("Failed to load notifications");
     }
@@ -217,16 +264,16 @@ export default function Admin() {
 
   async function loadHolidays() {
     try {
-      // Holidays might be Global or Per-Org.
-      // Let's assume Global for now, OR per org?
-      // Let's check for orgId field. If matches OR if global (no orgId).
-
-      const q = query(collection(db, "publicHolidays"), where("orgId", "==", orgId));
-      const snapshot = await getDocs(q);
-
-      // Also fetch globals? (maybe later)
-
-      setHolidays(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date)));
+      if (isSuperAdmin && filterOrgId === "ALL") {
+        const snapshot = await getDocs(collection(db, "publicHolidays"));
+        setHolidays(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date)));
+      } else {
+        const targetOrg = isSuperAdmin ? filterOrgId : orgId;
+        if (!targetOrg) return;
+        const q = query(collection(db, "publicHolidays"), where("orgId", "==", targetOrg));
+        const snapshot = await getDocs(q);
+        setHolidays(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date)));
+      }
     } catch {
       toast.error("Failed to load holidays");
     }
@@ -289,6 +336,16 @@ export default function Admin() {
     }
 
     try {
+      // Determine Org ID for creation
+      let targetOrgId = orgId;
+      let targetOrgName = org?.name;
+
+      if (isSuperAdmin && filterOrgId !== "ALL") {
+        targetOrgId = filterOrgId;
+        const selectedOrgObj = orgs.find(o => o.id === filterOrgId);
+        targetOrgName = selectedOrgObj?.name || "Organization";
+      }
+
       // Check if user with this email already exists
       const existingUser = users.find(u => u.email.toLowerCase() === newUserEmail.toLowerCase());
       if (existingUser) {
@@ -302,10 +359,10 @@ export default function Admin() {
         name: newUserName.trim().charAt(0).toUpperCase() + newUserName.trim().slice(1).toLowerCase(),
         email: newUserEmail.toLowerCase(),
         role: newUserRole,
-        orgId: orgId, // <--- Link to current Org
+        orgId: targetOrgId, // <--- Link to Target Org
         leaveDaysAssigned: 0,
         workingDays: [],
-        organizationName: org?.name || "",
+        organizationName: targetOrgName || "",
         photoURL: "",
         createdAt: ts(),
       });
@@ -317,10 +374,10 @@ export default function Admin() {
         name: newUserName.trim().charAt(0).toUpperCase() + newUserName.trim().slice(1).toLowerCase(),
         email: newUserEmail.toLowerCase(),
         role: newUserRole,
-        orgId: orgId,
+        orgId: targetOrgId,
         leaveDaysAssigned: 0,
         workingDays: [],
-        organizationName: org?.name || "",
+        organizationName: targetOrgName || "",
         photoURL: ""
       }]);
 
@@ -401,11 +458,21 @@ export default function Admin() {
       const token = crypto.randomUUID(); // Generate unique token
       const inviteLink = `${window.location.origin}/join?token=${token}`;
 
+      // Determine Org ID for invite
+      let targetOrgId = orgId;
+      let targetOrgName = org?.name;
+
+      if (isSuperAdmin && filterOrgId !== "ALL") {
+        targetOrgId = filterOrgId;
+        const selectedOrgObj = orgs.find(o => o.id === filterOrgId);
+        targetOrgName = selectedOrgObj?.name || "Organization";
+      }
+
       // 1. Create Invitation Doc
       await addDoc(collection(db, "invitations"), {
         email: inviteEmail.toLowerCase(),
-        orgId: orgId,
-        orgName: org?.name || "Organization",
+        orgId: targetOrgId,
+        orgName: targetOrgName,
         token: token,
         status: 'pending',
         createdAt: ts(),
@@ -413,7 +480,7 @@ export default function Admin() {
       });
 
       // 2. Send Email
-      const result = await sendInvitationEmail(inviteEmail, inviteLink, org?.name || "our company");
+      const result = await sendInvitationEmail(inviteEmail, inviteLink, targetOrgName || "our company");
 
       if (result.success) {
         toast.success(`Invitation created for ${inviteEmail}`);
@@ -455,7 +522,7 @@ export default function Admin() {
     try {
       await updateDoc(doc(db, "users", selectedUser), { workingDays });
       setUsers(prev => prev.map(u => u.id === selectedUser ? { ...u, workingDays } : u));
-      setWorkingDays([]);
+      // Keep existing displayed days
       toast.success("Working days saved");
     } catch {
       toast.error("Failed to save working days");
@@ -476,10 +543,20 @@ export default function Admin() {
     try {
       const isSingleDay = from === to;
 
+      // Determine Org ID
+      let targetOrgId = orgId;
+      if (isSuperAdmin && filterOrgId !== "ALL") {
+        targetOrgId = filterOrgId;
+      }
+      // Or safer: rely on user's orgId since we found selectedUser
+      if (selectedUserObj.orgId) {
+        targetOrgId = selectedUserObj.orgId;
+      }
+
       const leave = {
         userId: selectedUser,
         userName,
-        orgId: orgId, // <--- Link to Org
+        orgId: targetOrgId, // <--- Link to Org
         from,
         to,
         type: leaveType,
@@ -505,7 +582,7 @@ export default function Admin() {
         message: `Leave requested for ${userName}`,
         read: false,
         createdAt: ts(),
-        orgId: orgId, // <--- Link to Org
+        orgId: targetOrgId, // <--- Link to Org
         meta: { userId: selectedUser }
       });
 
@@ -595,10 +672,15 @@ export default function Admin() {
   async function addHoliday() {
     if (!newHolidayName || !newHolidayDate) return toast.error("Enter name & date");
     try {
+      let targetOrgId = orgId;
+      if (isSuperAdmin && filterOrgId !== "ALL") {
+        targetOrgId = filterOrgId;
+      }
+
       const docRef = await addDoc(collection(db, "publicHolidays"), {
         name: newHolidayName,
         date: newHolidayDate,
-        orgId: orgId, // <--- Link to Org
+        orgId: targetOrgId, // <--- Link to Org
         createdAt: ts()
       });
       setHolidays(prev => [...prev, { id: docRef.id, name: newHolidayName, date: newHolidayDate }].sort((a, b) => a.date.localeCompare(b.date)));
@@ -636,6 +718,12 @@ export default function Admin() {
     ];
 
     try {
+      // Determine Org ID for seeding
+      let targetOrgId = orgId;
+      if (isSuperAdmin && filterOrgId !== "ALL") {
+        targetOrgId = filterOrgId;
+      }
+
       let addedCount = 0;
       for (const holiday of internationalHolidays) {
         // Check if holiday already exists
@@ -644,6 +732,7 @@ export default function Admin() {
           const docRef = await addDoc(collection(db, "publicHolidays"), {
             name: holiday.name,
             date: holiday.date,
+            orgId: targetOrgId, // <--- Link to Org
             createdAt: ts()
           });
           setHolidays(prev => [...prev, { id: docRef.id, ...holiday }].sort((a, b) => a.date.localeCompare(b.date)));
@@ -951,6 +1040,23 @@ export default function Admin() {
           <h1 className="text-2xl font-heading font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
             Admin Panel
           </h1>
+          {isSuperAdmin && (
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
+                Super Admin View
+              </label>
+              <select
+                className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                value={filterOrgId}
+                onChange={(e) => setFilterOrgId(e.target.value)}
+              >
+                <option value="ALL">All Organizations</option>
+                {orgs.map(o => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <nav className="flex-1 space-y-2">
@@ -959,6 +1065,9 @@ export default function Admin() {
           <SidebarItem id="holidays" icon={GlobeAmericasIcon} label="Public Holidays" />
           <SidebarItem id="yearEndReset" icon={CalendarDaysIcon} label="Year-End Reset" />
           <SidebarItem id="notificationsTab" icon={BellIcon} label="Notifications" />
+          {isSuperAdmin && (
+            <SidebarItem id="logs" icon={ClipboardDocumentListIcon} label="System Logs" />
+          )}
         </nav>
 
         <div className="mt-auto pt-6 border-t border-slate-200 dark:border-white/5 space-y-2">
@@ -1034,57 +1143,65 @@ export default function Admin() {
                   </div>
                 </div>
 
-                {/* Create Org Card */}
-                <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
-                  <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
-                    <BuildingOfficeIcon className="h-5 w-5 text-secondary-400" />
-                    Organization Management
-                  </h2>
-                  <div className="space-y-6 flexflex-flow">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <input
-                        className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
-                        placeholder="Organization Name"
-                        value={newOrg}
-                        onChange={e => setNewOrg(e.target.value)}
-                      />
-                      <button
-                        className="bg-secondary-600 hover:bg-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20 w-full sm:w-auto"
-                        onClick={createOrg}
-                      >
-                        Add
-                      </button>
-                    </div>
-
-                    <div className="border-t border-slate-200 dark:border-white/5 pt-6 flex-wrap">
-                      <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Assign User to Organization</h3>
-                      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-                        <select
+                {/* Create Org Card (Super Admin Only) */}
+                {isSuperAdmin && (
+                  <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-4 sm:p-6 rounded-2xl shadow-xl transition-colors duration-200">
+                    <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6 flex items-center gap-2">
+                      <BuildingOfficeIcon className="h-5 w-5 text-secondary-400" />
+                      Organization Management
+                    </h2>
+                    <div className="space-y-6">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <input
                           className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
-                          value={selectedUser}
-                          onChange={e => setSelectedUser(e.target.value)}
-                        >
-                          <option value="">Select User</option>
-                          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
-                        <select
-                          className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
-                          value={selectedOrg}
-                          onChange={e => setSelectedOrg(e.target.value)}
-                        >
-                          <option value="">Select Org</option>
-                          {orgs.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
-                        </select>
+                          placeholder="Organization Name"
+                          value={newOrg}
+                          onChange={e => setNewOrg(e.target.value)}
+                        />
                         <button
-                          className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
-                          onClick={assignUserToOrg}
+                          className="bg-secondary-600 hover:bg-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20 w-full sm:w-auto"
+                          onClick={createOrg}
                         >
-                          Assign
+                          Add
                         </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          Move User to Organization
+                        </h3>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <select
+                            className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
+                            value={selectedUser}
+                            onChange={e => setSelectedUser(e.target.value)}
+                          >
+                            <option value="">Select User</option>
+                            {users.map(u => (
+                              <option key={u.id} value={u.id}>{u.name} ({u.organizationName || "No Org"})</option>
+                            ))}
+                          </select>
+                          <select
+                            className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
+                            value={selectedOrg}
+                            onChange={e => setSelectedOrg(e.target.value)}
+                          >
+                            <option value="">Select Organization</option>
+                            {orgs.map(o => (
+                              <option key={o.id} value={o.name}>{o.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            className="bg-secondary-600 hover:bg-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20 w-full sm:w-auto"
+                            onClick={assignUserToOrg}
+                          >
+                            Move
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Users Table */}
@@ -1661,6 +1778,54 @@ export default function Admin() {
               </ul>
             </div>
           )}
+          {/* System Logs Tab (Super Admin Only) */}
+          {tab === "logs" && isSuperAdmin && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 p-6 rounded-2xl shadow-xl transition-colors duration-200">
+                <h2 className="text-xl font-heading font-semibold mb-6 flex items-center gap-2">
+                  <ClipboardDocumentListIcon className="h-5 w-5 text-primary-400" />
+                  System Activity Logs
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-white/5 text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                        <th className="p-4">Time</th>
+                        <th className="p-4">Type</th>
+                        <th className="p-4">Message</th>
+                        <th className="p-4">Org ID</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {notifications.length > 0 ? (
+                        notifications.map(log => (
+                          <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                            <td className="p-4 text-slate-500 font-mono text-xs">
+                              {log.createdAt?.seconds ? new Date(log.createdAt.seconds * 1000).toLocaleString() : "Just now"}
+                            </td>
+                            <td className="p-4 text-xs font-medium uppercase text-primary-500">
+                              {log.type}
+                            </td>
+                            <td className="p-4 text-slate-700 dark:text-slate-300">
+                              {log.message}
+                            </td>
+                            <td className="p-4 text-xs font-mono text-slate-400">
+                              {log.orgId || "N/A"}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="4" className="p-8 text-center text-slate-400 italic">No logs found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
     </div>

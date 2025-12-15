@@ -8,8 +8,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // SUPER ADMIN CHECK
+    function isSuperAdmin() {
+      return request.auth.token.email == "akmusajee53@gmail.com"; 
+    }
+
     // Get the user's Org ID from their User Document
-    // TRUSTED SOURCE: We assume the User Document is correct.
     function getOrgId() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
     }
@@ -17,13 +21,13 @@ service cloud.firestore {
     // Check if the Resource (doc) belongs to the same Org as the Requestor
     function belongsToMyOrg() {
       return isAuthenticated() && 
-             resource.data.orgId == getOrgId();
+             (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     // Start of new Creation: Check if new doc has correct Org ID
     function createsInMyOrg() {
       return isAuthenticated() && 
-             request.resource.data.orgId == getOrgId();
+             (request.resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     function isOwner(userId) {
@@ -33,21 +37,22 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
+      return isSuperAdmin() || (isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
     }
 
     // --- Rules ---
 
     // 1. USERS Collection
     match /users/{userId} {
-      // READ: Allow if (Email Matches Auth) OR (UID matches Auth) OR (Same Org) OR (Doc ID matches Auth)
+      // READ: Allow if (Email Matches Auth) OR (UID matches Auth) OR (Same Org) OR (Doc ID matches Auth) OR SuperAdmin
       allow read: if isAuthenticated() && (
         resource.data.email == request.auth.token.email || 
         resource.data.uid == request.auth.uid ||
         request.auth.uid == userId ||
-        resource.data.orgId == getOrgId()
+        resource.data.orgId == getOrgId() ||
+        isSuperAdmin()
       );
       
       // CREATE: Allow during Signup (no Org yet) OR Admin creating user in same Org
@@ -57,11 +62,11 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         resource.data.email == request.auth.token.email ||
         request.auth.uid == resource.data.uid ||
-        (isAdmin() && resource.data.orgId == getOrgId())
+        (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin()))
       );
       
       // DELETE: Admin (same org)
-      allow delete: if isAdmin() && resource.data.orgId == getOrgId();
+      allow delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     // 2. LEAVE REQUESTS
@@ -74,59 +79,52 @@ service cloud.firestore {
 
       // Update: Admin (same org) OR Owner (cancelling)
       allow update: if isAuthenticated() && (
-         (isAdmin() && resource.data.orgId == getOrgId()) || 
+         (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin())) || 
          (resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']) && request.resource.data.status == 'Cancelled')
       );
 
       // Delete: Admin (same org)
-      allow delete: if isAdmin() && resource.data.orgId == getOrgId();
+      allow delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     // 3. ORGANIZATIONS
     match /organizations/{orgId} {
-      // Read: Allow if it's MY org
-      allow read: if isAuthenticated() && (orgId == getOrgId() || resource.data.ownerId == request.auth.uid);
+      // Read: Allow if it's MY org OR SuperAdmin
+      allow read: if isAuthenticated() && (orgId == getOrgId() || resource.data.ownerId == request.auth.uid || isSuperAdmin());
       
       // Create: Signup (Open)
       allow create: if isAuthenticated();
       
       // Update: Admin of that Org
-      allow update, delete: if isAdmin() && orgId == getOrgId();
+      allow update, delete: if isAdmin() && (orgId == getOrgId() || isSuperAdmin());
     }
 
     // 4. PUBLIC HOLIDAYS
     match /publicHolidays/{holidayId} {
       allow read: if belongsToMyOrg();
-      allow write: if isAdmin() && createsInMyOrg();
+      
+      // CREATE: Must contain correct orgId
+      allow create: if createsInMyOrg();
+      
+      // DELETE/UPDATE: Admin of the existing doc's org
+      allow update, delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     // 6. NOTIFICATIONS
     match /notifications/{notificationId} {
       allow read: if belongsToMyOrg();
       allow create: if createsInMyOrg();
-      allow update, delete: if isAdmin() && resource.data.orgId == getOrgId();
+      allow update, delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     // 5. INVITATIONS (New for Phase 3)
     match /invitations/{inviteId} {
-       // Read: Public (so VerifyToken works without auth? No, we need to read it to verify)
-       // Actually, verification usually happens on component mount. User is NOT auth'd yet on /join.
-       // So we must allow read if we know the token? 
-       // Firestore doesn't support "allow read if query matches field".
-       // WORKAROUND: Allow read if resource.data.token == request.query?? No.
-       // Compromise for MVP: Allow public READ of invitations (low risk if UUID is long)
-       // OR: Cloud Function to verify.
-       // LET'S GO WITH: Allow read if true (for verify) but only if they know the ID? 
-       // Better: The Query uses `where("token", "==", token)`. 
        allow read: if true; 
        
        // Create: Admin Only
        allow create: if isAdmin() && createsInMyOrg();
        
-       // Update: Admin or The User who accepted it (to mark status='accepted')
-       // But user is new? 
-       // Let's allow update if status changes to 'accepted'
-       allow update: if true; 
+       allow update: if true || isSuperAdmin(); 
     }
   }
 }

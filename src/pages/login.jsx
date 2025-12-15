@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
-import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, googleProvider } from "../firebase/firebase";
 import { signInWithPopup, signInAnonymously, getAuth } from "firebase/auth";
 import { sendOTPEmail } from "../services/emailService";
@@ -48,10 +48,32 @@ export default function Login() {
       const user = result.user;
 
       // Check if user exists in Firestore by email (not UID)
-      const q = query(collection(db, "users"), where("email", "==", user.email));
+      const q = query(collection(db, "users"), where("email", "==", user.email.toLowerCase()));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
+        // SPECIAL CASE: Auto-create Master Admin if not exists
+        if (user.email === "akmusajee53@gmail.com") {
+          const newDocRef = doc(db, "users", user.uid); // Use Auth UID as doc ID
+          await setDoc(newDocRef, {
+            uid: user.uid,
+            name: user.displayName || "Master Admin",
+            email: user.email,
+            role: "admin",
+            orgId: "MASTER_ADMIN",
+            organizationName: "System Administrator",
+            photoURL: user.photoURL || "",
+            createdAt: serverTimestamp(),
+            leaveDaysAssigned: 100,
+            workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+          });
+
+          // Proceed to admin
+          navigate("/admin");
+          setIsLoading(false);
+          return;
+        }
+
         // User not registered by admin - deny access
         setError("Access denied: Your email is not registered. Please contact your administrator.");
         setIsLoading(false);
