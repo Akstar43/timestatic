@@ -31,6 +31,21 @@ const handler = async (req, res) => {
         return res.status(400).send('Missing required fields');
     }
 
+    // Check for environment variables
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
+        console.error('Missing credentials!');
+        console.error('GMAIL_USER:', process.env.GMAIL_USER ? 'SET' : 'MISSING');
+        console.error('GMAIL_PASS:', process.env.GMAIL_PASS ? 'SET' : 'MISSING');
+        return res.status(500).json({
+            success: false,
+            error: 'Server configuration error: Missing email credentials. Please check environment variables.',
+            debug: {
+                GMAIL_USER: !!process.env.GMAIL_USER,
+                GMAIL_PASS: !!process.env.GMAIL_PASS
+            }
+        });
+    }
+
     // Configure Transporter (Gmail)
     const transporter = nodemailer.createTransport({
         service: 'gmail',
