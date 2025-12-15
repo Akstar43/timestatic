@@ -23,8 +23,22 @@ export default function ProtectedRoute({ children, requiredRole }) {
 
         if (!snapshot.empty) {
           const userData = snapshot.docs[0].data();
+          // console.log("ProtectedRoute: Found user by UID", userData.email, "Rule:", userData.role);
           setUserRole(userData.role || "user");
         } else {
+          // Fallback: Try finding by Email (common for pre-existing accounts logging in via Google)
+          if (currentUser.email) {
+            const qEmail = query(collection(db, "users"), where("email", "==", currentUser.email));
+            const snapshotEmail = await getDocs(qEmail);
+            if (!snapshotEmail.empty) {
+              const userData = snapshotEmail.docs[0].data();
+              // console.log("ProtectedRoute: Found user by Email", userData.email, "Rule:", userData.role);
+              setUserRole(userData.role || "user");
+              return;
+            }
+          }
+
+          console.warn("ProtectedRoute: No user found for UID or Email", currentUser.uid);
           setUserRole("user"); // Default to user if not found
         }
       } catch (error) {

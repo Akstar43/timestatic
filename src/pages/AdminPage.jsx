@@ -1,10 +1,11 @@
 // src/pages/Admin.jsx
 import React, { useEffect, useState } from "react";
-import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, query, where } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { auth, db, ts } from "../firebase/firebase";
 import toast, { Toaster } from "react-hot-toast";
 import { LEAVE_CATEGORIES } from "../context/leavetypes"; // Import shared categories
+import { useOrganization } from "../context/OrganizationContext";
 import {
   UsersIcon,
   BuildingOfficeIcon,
@@ -21,9 +22,10 @@ import {
 } from "@heroicons/react/24/outline";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
-import { sendLeaveStatusEmail, sendWelcomeEmail } from "../services/emailService";
+import { sendLeaveStatusEmail, sendWelcomeEmail, sendInvitationEmail } from "../services/emailService";
 import { EMAILJS_CONFIG } from "../config/emailConfig";
 import { sendPushNotification } from "../services/notificationService";
+import { calculateLeaveDuration, isNonWorkingDay } from "../utils/leaveCalculations";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -68,6 +70,9 @@ export default function Admin() {
 
   // Notifications
   const [notifications, setNotifications] = useState([]);
+
+  // Invitations
+  const [invitations, setInvitations] = useState([]); // If we want to list them, for now just create.
 
   // Year-End Reset
   const [transferRemainingDays, setTransferRemainingDays] = useState(false);
@@ -133,14 +138,20 @@ export default function Admin() {
     }
   };
 
+  // Organization Context
+  const { org } = useOrganization();
+  const orgId = org?.id;
+
   // ----- Load data -----
   useEffect(() => {
-    loadUsers();
-    loadOrgs();
-    loadLeaves();
-    loadNotifications();
-    loadHolidays();
-  }, []);
+    if (orgId) {
+      loadUsers();
+      // loadOrgs(); // No longer needed for single-tenant view, or restricts to just THIS org
+      loadLeaves();
+      loadNotifications();
+      loadHolidays();
+    }
+  }, [orgId]);
 
   // Auto-update leave type when category changes
   // When leave type changes, default the category to the first valid option
@@ -150,27 +161,43 @@ export default function Admin() {
       setLeaveCategory(validCategories[0]);
     }
   }, [leaveType]);
+
   async function loadUsers() {
     try {
-      const snapshot = await getDocs(collection(db, "users"));
+      // Filter users by Organization
+      const q = query(collection(db, "users"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
       setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch {
+    } catch (e) {
+      console.error(e);
       toast.error("Failed to load users");
     }
   }
 
+  // Legacy/SuperAdmin function - maybe disable for normal admins?
   async function loadOrgs() {
-    try {
-      const snapshot = await getDocs(collection(db, "organizations"));
-      setOrgs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch {
-      toast.error("Failed to load organizations");
+    // For now, let's just show the current org
+    if (org) {
+      setOrgs([org]);
     }
   }
 
   async function loadLeaves() {
     try {
-      const snapshot = await getDocs(collection(db, "leaveRequests"));
+      // Filter leaves by Organization (if we added orgId to leaves - which we haven't yet, but we will!)
+      // For Phase 1 (Migration), we might not have orgId on leaves yet.
+      // Ideally, we query leaves where 'userId' is in our list of users.
+      // BUT Firestore 'in' query is limited to 10.
+
+      // OPTION: Fetch ALL leaves and filter client side (OK for MVP).
+      // OPTION B: Add orgId to leaves (Better). Let's assume we do B in the "bookLeave" function.
+
+      // Let's try Query by OrgID first. If empty, maybe fallback or just show nothing until new leaves created.
+      // Actually for legacy compatibility, let's fetch all and filter client side if orgId missing.
+      // But for Security, we should eventually query.
+
+      const q = query(collection(db, "leaveRequests"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
       setLeaveRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch {
       toast.error("Failed to load leave requests");
@@ -179,8 +206,10 @@ export default function Admin() {
 
   async function loadNotifications() {
     try {
-      const snapshot = await getDocs(collection(db, "notifications"));
-      setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      const q = query(collection(db, "notifications"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
+      const notifs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setNotifications(notifs);
     } catch {
       toast.error("Failed to load notifications");
     }
@@ -188,7 +217,15 @@ export default function Admin() {
 
   async function loadHolidays() {
     try {
-      const snapshot = await getDocs(collection(db, "publicHolidays"));
+      // Holidays might be Global or Per-Org.
+      // Let's assume Global for now, OR per org?
+      // Let's check for orgId field. If matches OR if global (no orgId).
+
+      const q = query(collection(db, "publicHolidays"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
+
+      // Also fetch globals? (maybe later)
+
       setHolidays(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date)));
     } catch {
       toast.error("Failed to load holidays");
@@ -199,36 +236,21 @@ export default function Admin() {
   function getRemainingLeaves(userId) {
     const user = users.find(u => u.id === userId);
     if (!user) return 0;
+
+    // Convert holidays array to map for O(1) lookup
+    const holidayMap = {};
+    holidays.forEach(h => holidayMap[h.date] = h.name);
+
     const usedLeaves = leaveRequests
       .filter(l => {
         const categoryInfo = LEAVE_CATEGORIES[l.category];
         return l.userId === userId && l.status === "Approved" && categoryInfo?.type === "Deductable";
       })
       .reduce((sum, l) => {
-        const fromDate = new Date(l.from);
-        const toDate = new Date(l.to);
-
-        // Simple logic for admin estimation - or we can copy valid calculation logic if needed
-        // For now, let's keep it simple or implement the same logic as UserDashboard if possible.
-        // Actually, let's just do a rough count plus partials since we don't have user schedule here easily.
-        // Wait, we do have user schedule in "users" array if we looked. But for now let's use the stored fields if available.
-
-        let days = 0;
-        let curr = new Date(fromDate);
-        while (curr <= toDate) {
-          days++;
-          curr.setDate(curr.getDate() + 1);
-        }
-
-        if (l.isSingleDay || l.from === l.to) {
-          if (l.halfType && l.halfType !== "Full Day") days = 0.5;
-        } else {
-          if (l.startHalfType && l.startHalfType !== "Full Day") days -= 0.5;
-          if (l.endHalfType && l.endHalfType !== "Full Day") days -= 0.5;
-        }
-
-        return sum + days;
+        const isSingle = l.isSingleDay || l.from === l.to;
+        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", user, holidayMap);
       }, 0);
+
     return (user.leaveDaysAssigned || 0) - usedLeaves;
   }
 
@@ -280,9 +302,10 @@ export default function Admin() {
         name: newUserName.trim().charAt(0).toUpperCase() + newUserName.trim().slice(1).toLowerCase(),
         email: newUserEmail.toLowerCase(),
         role: newUserRole,
+        orgId: orgId, // <--- Link to current Org
         leaveDaysAssigned: 0,
         workingDays: [],
-        organizationName: "",
+        organizationName: org?.name || "",
         photoURL: "",
         createdAt: ts(),
       });
@@ -294,9 +317,10 @@ export default function Admin() {
         name: newUserName.trim().charAt(0).toUpperCase() + newUserName.trim().slice(1).toLowerCase(),
         email: newUserEmail.toLowerCase(),
         role: newUserRole,
+        orgId: orgId,
         leaveDaysAssigned: 0,
         workingDays: [],
-        organizationName: "",
+        organizationName: org?.name || "",
         photoURL: ""
       }]);
 
@@ -358,6 +382,61 @@ export default function Admin() {
     }
   }
 
+  // ----- Invitation System -----
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteLinkSuccess, setInviteLinkSuccess] = useState("");
+
+  async function handleInviteUser() {
+    if (!inviteEmail) return toast.error("Please enter an email");
+
+    // Check if user already exists in this org (optional, but good UX)
+    if (users.some(u => u.email.toLowerCase() === inviteEmail.toLowerCase())) {
+      return toast.error("User with this email already exists in this organization.");
+    }
+
+    setIsInviting(true);
+    try {
+      const token = crypto.randomUUID(); // Generate unique token
+      const inviteLink = `${window.location.origin}/join?token=${token}`;
+
+      // 1. Create Invitation Doc
+      await addDoc(collection(db, "invitations"), {
+        email: inviteEmail.toLowerCase(),
+        orgId: orgId,
+        orgName: org?.name || "Organization",
+        token: token,
+        status: 'pending',
+        createdAt: ts(),
+        role: 'user' // Default to user for now
+      });
+
+      // 2. Send Email
+      const result = await sendInvitationEmail(inviteEmail, inviteLink, org?.name || "our company");
+
+      if (result.success) {
+        toast.success(`Invitation created for ${inviteEmail}`);
+        setInviteLinkSuccess(inviteLink); // Show success UI
+      } else {
+        toast.error("Failed to send email, but invite link created.");
+        setInviteLinkSuccess(inviteLink); // Still show link
+        console.error(result.error);
+      }
+
+    } catch (error) {
+      console.error("Invite error:", error);
+      toast.error("Failed to create invitation");
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Link copied!");
+  };
+
   // ----- Leave Days -----
   async function saveLeaveDays() {
     if (!selectedUser) return toast.error("Select user");
@@ -400,6 +479,7 @@ export default function Admin() {
       const leave = {
         userId: selectedUser,
         userName,
+        orgId: orgId, // <--- Link to Org
         from,
         to,
         type: leaveType,
@@ -425,6 +505,7 @@ export default function Admin() {
         message: `Leave requested for ${userName}`,
         read: false,
         createdAt: ts(),
+        orgId: orgId, // <--- Link to Org
         meta: { userId: selectedUser }
       });
 
@@ -517,6 +598,7 @@ export default function Admin() {
       const docRef = await addDoc(collection(db, "publicHolidays"), {
         name: newHolidayName,
         date: newHolidayDate,
+        orgId: orgId, // <--- Link to Org
         createdAt: ts()
       });
       setHolidays(prev => [...prev, { id: docRef.id, name: newHolidayName, date: newHolidayDate }].sort((a, b) => a.date.localeCompare(b.date)));
@@ -736,6 +818,97 @@ export default function Admin() {
         </div>
       )}
 
+      {/* Invite User Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-dark-card rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-200 dark:border-white/10 animate-fade-in-up">
+            <h3 className="text-xl font-heading font-bold mb-2">
+              {inviteLinkSuccess ? "Invitation Sent!" : "Invite Team Member"}
+            </h3>
+
+            {!inviteLinkSuccess ? (
+              <>
+                <p className="text-slate-600 dark:text-slate-300 mb-6 text-sm">
+                  Send an email invitation. Attempts to join will be linked to <strong>{org?.name}</strong>.
+                </p>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white"
+                    placeholder="colleague@example.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => { setShowInviteModal(false); setInviteEmail(""); }}
+                    className="px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                    disabled={isInviting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleInviteUser}
+                    disabled={isInviting}
+                    className="px-4 py-2 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isInviting ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Invite"
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-emerald-600 dark:text-emerald-400 mb-4 text-sm font-medium">
+                  User has been emailed! You can also share this link directly:
+                </p>
+
+                <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg mb-4 break-all text-xs font-mono border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300">
+                  {inviteLinkSuccess}
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => copyToClipboard(inviteLinkSuccess)}
+                    className="w-full flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white py-2.5 rounded-lg font-medium transition-colors"
+                  >
+                    <span className="h-5 w-5">📋</span> Copy Link
+                  </button>
+
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(`Join ${org?.name || 'our team'} on TimeAway here: ${inviteLinkSuccess}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#128C7E] text-white py-2.5 rounded-lg font-medium transition-colors shadow-lg"
+                  >
+                    <span className="h-5 w-5">💬</span> Share on WhatsApp
+                  </a>
+
+                  <button
+                    onClick={() => { setShowInviteModal(false); setInviteEmail(""); setInviteLinkSuccess(""); }}
+                    className="w-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm mt-2"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <Toaster position="top-right" toastOptions={{
         style: {
           background: '#1e293b',
@@ -916,8 +1089,15 @@ export default function Admin() {
 
               {/* Users Table */}
               <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-xl overflow-hidden transition-colors duration-200">
-                <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5">
+                <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5 flex justify-between items-center">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold">User Directory</h2>
+                  <button
+                    onClick={() => setShowInviteModal(true)}
+                    className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-all hover:scale-105"
+                  >
+                    <UsersIcon className="h-4 w-4" />
+                    Invite User
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">

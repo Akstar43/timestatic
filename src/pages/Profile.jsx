@@ -5,6 +5,7 @@ import { getAuth } from "firebase/auth";
 import { db, storage } from "../firebase/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
+import { useOrganization } from "../context/OrganizationContext";
 import {
     UserCircleIcon,
     EnvelopeIcon,
@@ -41,13 +42,18 @@ export default function Profile() {
     const [leaves, setLeaves] = useState([]);
     const [holidays, setHolidays] = useState({});
 
+    const { org } = useOrganization();
+    const orgId = org?.id;
+
     useEffect(() => {
-        if (currentUserId) {
+        if (currentUserId && orgId) {
             loadUserData();
+            loadLeaves();
+            loadHolidays();
         }
-        loadLeaves();
-        loadHolidays();
-    }, [currentUserId]);
+    }, [currentUserId, orgId]);
+
+    // ... loadUserData remains same (fetches by UID) ...
 
     async function loadUserData() {
         if (!currentUserId) return;
@@ -73,9 +79,25 @@ export default function Profile() {
 
     async function loadLeaves() {
         try {
-            const snapshot = await getDocs(collection(db, "leaveRequests"));
+            // Filter by Org AND User (Optimization)
+            // Or just User? 
+            // Better to filter by Org for security, then User for view
+            // Actually, querying just by Org is unsafe if many users. 
+            // Better: query(collection, where("userId", "==", userFirestoreId))
+            // BUT we don't have userFirestoreId in state securely until loadUserData finishes.
+
+            // For now, let's keep it simple: Fetch My Leaves by my UID (if stored on leave) or filter client side
+            // Ideally: query(collection(db, "leaveRequests"), where("userId", "==", userDocId))
+            // But we might not have userDocId yet. 
+
+            // Let's use the orgId filter as a base layer if possible, or just fetch all and filter client side (legacy style)
+            // Wait, we can query by orgId AND userId if we have composite index.
+
+            // Current approach in UserDashboard: fetch ALL leaves for Org.
+            const q = query(collection(db, "leaveRequests"), where("orgId", "==", orgId));
+            const snapshot = await getDocs(q);
             const allLeaves = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            setLeaves(allLeaves); // Load ALL leaves, filter in getLeaveStats
+            setLeaves(allLeaves);
         } catch (error) {
             console.error("Failed to load leaves:", error);
         }
@@ -83,7 +105,8 @@ export default function Profile() {
 
     async function loadHolidays() {
         try {
-            const snapshot = await getDocs(collection(db, "publicHolidays"));
+            const q = query(collection(db, "publicHolidays"), where("orgId", "==", orgId));
+            const snapshot = await getDocs(q);
             const holidayData = {};
             snapshot.docs.forEach(d => {
                 const data = d.data();

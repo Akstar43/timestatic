@@ -2,11 +2,16 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { OrganizationProvider } from "./context/OrganizationContext";
 import Login from "./pages/login";
+import SignupCompany from "./pages/SignupCompany";
 import Admin from "./pages/AdminPage";
 import UserDashboard from "./pages/UserDashboard";
 import Profile from "./pages/Profile";
 import SetupAdmin from "./pages/SetupAdmin";
+import TestIsolation from "./pages/TestIsolation"; // New Test Page
+import JoinOrganization from "./pages/JoinOrganization"; // Invite Acceptance Page
+import ResetData from "./pages/ResetData"; // Utils
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
@@ -62,48 +67,54 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
-          <Toaster />
-          <Routes>
-            {/* Setup Admin - First Time Setup */}
-            <Route path="/setup-admin" element={<SetupAdmin />} />
+        <OrganizationProvider>
+          <Router>
+            <Toaster />
+            <Routes>
+              {/* Setup Admin - First Time Setup */}
+              <Route path="/setup-admin" element={<SetupAdmin />} />
 
-            <Route path="/login" element={<Login />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignupCompany />} />
+              <Route path="/join" element={<JoinOrganization />} />
+              {/* <Route path="/reset-data" element={<ResetData />} /> */}
 
-            {/* Admin Dashboard */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <Admin />
-                </ProtectedRoute>
-              }
-            />
+              {/* Admin Dashboard */}
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Admin />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* User Dashboard */}
-            <Route
-              path="/user-dashboard"
-              element={
-                <ProtectedRoute requiredRole="user">
-                  <UserDashboard />
-                </ProtectedRoute>
-              }
-            />
+              {/* User Dashboard */}
+              <Route
+                path="/user-dashboard"
+                element={
+                  <ProtectedRoute requiredRole="user">
+                    <UserDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Profile Page */}
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute requiredRole="user">
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
+              {/* Profile Page */}
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute requiredRole="user">
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Redirect root to login */}
-            <Route path="/" element={<Login />} />
-          </Routes>
-        </Router>
+              {/* Redirect root to login */}
+              <Route path="/test-isolation" element={<ProtectedRoute><TestIsolation /></ProtectedRoute>} />
+              <Route path="/" element={<Login />} />
+            </Routes>
+          </Router>
+        </OrganizationProvider>
       </AuthProvider>
     </ThemeProvider>
   );

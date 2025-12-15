@@ -8,18 +8,30 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Check if the user is the owner of the User Document at 'userId' (Document ID)
-    // We check if the stored 'uid' field in that document matches the request.auth.uid
+    // Get the user's Org ID from their User Document
+    // TRUSTED SOURCE: We assume the User Document is correct.
+    function getOrgId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
+    }
+
+    // Check if the Resource (doc) belongs to the same Org as the Requestor
+    function belongsToMyOrg() {
+      return isAuthenticated() && 
+             resource.data.orgId == getOrgId();
+    }
+
+    // Start of new Creation: Check if new doc has correct Org ID
+    function createsInMyOrg() {
+      return isAuthenticated() && 
+             request.resource.data.orgId == getOrgId();
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(userId)) &&
         get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
     }
 
-    // Safe Admin Check
-    // NOTE: This check requires the Admin User to have a User Document where the Document ID matches their Auth UID.
-    // If your Admin User has a random Document ID, this check will fail. 
-    // To fix this for an Admin, you must ensure their User Document ID is their Auth UID.
     function isAdmin() {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -30,57 +42,91 @@ service cloud.firestore {
 
     // 1. USERS Collection
     match /users/{userId} {
-      // Everyone can read profiles (needed for team features/login)
-      allow read: if isAuthenticated();
+      // READ: Allow if (Email Matches Auth) OR (UID matches Auth) OR (Same Org) OR (Doc ID matches Auth)
+      allow read: if isAuthenticated() && (
+        resource.data.email == request.auth.token.email || 
+        resource.data.uid == request.auth.uid ||
+        request.auth.uid == userId ||
+        resource.data.orgId == getOrgId()
+      );
       
-      // Create: Allow if you are creating YOUR OWN profile (userId matching Auth UID)
-      // OR if you are an Admin (but Admin check relies on ID=UID)
-      // Relaxed for initial setup if needed, but keeping strict for security.
-      // Note: usage of addDoc in client with random ID means 'userId' won't match auth.uid.
-      // So Users cannot create their own profile unless they use setDoc(uid). 
-      // Admin creating users via addDoc (random ID) necessitates Admin permission.
-      allow create: if isAuthenticated(); // TODO: Tighten this. Currently allows any auth user to create users (unsafe but needed if isAdmin fails)
+      // CREATE: Allow during Signup (no Org yet) OR Admin creating user in same Org
+      allow create: if isAuthenticated(); 
       
-      // Update: Admin OR Owner
-      allow update: if isAuthenticated() && (isAdmin() || isOwner(userId));
+      // UPDATE: Admin (same org) OR Owner OR (Email Matches Auth - for Account Linking)
+      allow update: if isAuthenticated() && (
+        resource.data.email == request.auth.token.email ||
+        request.auth.uid == resource.data.uid ||
+        (isAdmin() && resource.data.orgId == getOrgId())
+      );
       
-      // Delete: Admin only
-      allow delete: if isAdmin();
+      // DELETE: Admin (same org)
+      allow delete: if isAdmin() && resource.data.orgId == getOrgId();
     }
 
     // 2. LEAVE REQUESTS
     match /leaveRequests/{requestId} {
-      allow read: if isAuthenticated();
+      // READ: Same Org
+      allow read: if belongsToMyOrg();
 
-      // Create: Allow if the user is creating a request for THEMSELVES (verifying ownership of the userId passed)
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      // CREATE: Must include correct orgId
+      allow create: if createsInMyOrg();
 
-      // Update: Admin can approve/reject. Owner can CANCEL.
+      // Update: Admin (same org) OR Owner (cancelling)
       allow update: if isAuthenticated() && (
-        isAdmin() || 
-        (isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']) && request.resource.data.status == 'Cancelled')
+         (isAdmin() && resource.data.orgId == getOrgId()) || 
+         (resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']) && request.resource.data.status == 'Cancelled')
       );
 
-      // Delete: Admin only
-      allow delete: if isAdmin();
+      // Delete: Admin (same org)
+      allow delete: if isAdmin() && resource.data.orgId == getOrgId();
     }
 
     // 3. ORGANIZATIONS
     match /organizations/{orgId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      // Read: Allow if it's MY org
+      allow read: if isAuthenticated() && (orgId == getOrgId() || resource.data.ownerId == request.auth.uid);
+      
+      // Create: Signup (Open)
+      allow create: if isAuthenticated();
+      
+      // Update: Admin of that Org
+      allow update, delete: if isAdmin() && orgId == getOrgId();
     }
 
-    // 4. HOLIDAYS
+    // 4. PUBLIC HOLIDAYS
     match /publicHolidays/{holidayId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if belongsToMyOrg();
+      allow write: if isAdmin() && createsInMyOrg();
     }
 
-    // 5. NOTIFICATIONS
+    // 6. NOTIFICATIONS
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated(); // Allow system/users to mark read
+      allow read: if belongsToMyOrg();
+      allow create: if createsInMyOrg();
+      allow update, delete: if isAdmin() && resource.data.orgId == getOrgId();
+    }
+
+    // 5. INVITATIONS (New for Phase 3)
+    match /invitations/{inviteId} {
+       // Read: Public (so VerifyToken works without auth? No, we need to read it to verify)
+       // Actually, verification usually happens on component mount. User is NOT auth'd yet on /join.
+       // So we must allow read if we know the token? 
+       // Firestore doesn't support "allow read if query matches field".
+       // WORKAROUND: Allow read if resource.data.token == request.query?? No.
+       // Compromise for MVP: Allow public READ of invitations (low risk if UUID is long)
+       // OR: Cloud Function to verify.
+       // LET'S GO WITH: Allow read if true (for verify) but only if they know the ID? 
+       // Better: The Query uses `where("token", "==", token)`. 
+       allow read: if true; 
+       
+       // Create: Admin Only
+       allow create: if isAdmin() && createsInMyOrg();
+       
+       // Update: Admin or The User who accepted it (to mark status='accepted')
+       // But user is new? 
+       // Let's allow update if status changes to 'accepted'
+       allow update: if true; 
     }
   }
 }

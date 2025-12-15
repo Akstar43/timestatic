@@ -2,9 +2,7 @@ import emailjs from '@emailjs/browser';
 import { EMAILJS_CONFIG } from '../config/emailConfig';
 
 // ⚠️ FEATURE FLAG: Set to false to disable all emails (for testing)
-const EMAILS_ENABLED = false;
-
-
+const EMAILS_ENABLED = true;
 export const sendLeaveStatusEmail = async (userEmail, userName, status, leaveDetails, reason = "") => {
     if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
     if (!userEmail) return { success: false, error: "No recipient email" };
@@ -133,6 +131,31 @@ export const sendLeaveCancellationEmail = async (leaveDetails, userName) => {
         return { success: true };
     } catch (err) {
         console.error("Failed to send cancellation email", err);
+        return { success: false, error: err };
+    }
+};
+
+export const sendInvitationEmail = async (email, inviteLink, orgName) => {
+    if (!EMAILS_ENABLED) return { success: true, error: "Emails disabled" };
+    if (!email) return { success: false, error: "No recipient email" };
+    if (EMAILJS_CONFIG.SERVICE_ID === "YOUR_SERVICE_ID") return { success: false, error: "Not configured" };
+
+    const messageBody = `You have been invited to join ${orgName} on TimeAway. Click the link below to get started: ${inviteLink}`;
+
+    const templateParams = {
+        to_email: email,
+        to_name: "Future Team Member",
+        subject: `Invitation to join ${orgName}`,
+        title: `Join ${orgName}`,
+        message: messageBody
+    };
+
+    try {
+        await emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_GENERAL, templateParams, EMAILJS_CONFIG.PUBLIC_KEY);
+        console.log("Invitation email sent!");
+        return { success: true };
+    } catch (err) {
+        console.error("Failed to send invitation email", err);
         return { success: false, error: err };
     }
 };

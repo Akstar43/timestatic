@@ -1,10 +1,11 @@
 // src/pages/UserDashboard.jsx
 import React, { useEffect, useState } from "react";
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
 import { getAuth, signOut } from "firebase/auth";
 import { db, ts } from "../firebase/firebase";
 import { useNavigate } from "react-router-dom";
 import { LEAVE_CATEGORIES } from "../context/leavetypes"; // Shared categories
+import { useOrganization } from "../context/OrganizationContext";
 import toast, { Toaster } from "react-hot-toast";
 import {
   CalendarDaysIcon,
@@ -18,6 +19,7 @@ import {
 import ThemeToggle from "../components/ThemeToggle";
 import { sendNewLeaveRequestEmail, sendLeaveStatusEmail } from "../services/emailService";
 import { checkAndNotifyLowBalance } from "../services/notificationService";
+import { calculateLeaveDuration, isNonWorkingDay } from "../utils/leaveCalculations";
 
 export default function UserDashboard() {
   const auth = getAuth();
@@ -50,16 +52,26 @@ export default function UserDashboard() {
 
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+  const { org } = useOrganization();
+  const orgId = org?.id;
+
   // Simple hardcoded holidays for demo purposes
   const [holidays, setHolidays] = useState([]);
 
   useEffect(() => {
-    loadHolidays();
-  }, []);
+    if (orgId) {
+      loadHolidays();
+      loadUsers();
+      loadLeaves();
+    }
+  }, [orgId]);
 
   async function loadHolidays() {
     try {
-      const snapshot = await getDocs(collection(db, "publicHolidays"));
+      // Load Org Holidays + Maybe Global ones?
+      // For now, strict isolation: Only Org Holidays
+      const q = query(collection(db, "publicHolidays"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
       const holidayData = {};
       snapshot.docs.forEach(d => {
         const data = d.data();
@@ -78,28 +90,10 @@ export default function UserDashboard() {
   };
 
   // Helper to check if a date is a non-working day (based on user's working days config)
-  const isNonWorkingDay = (date, user) => {
-    if (!user || !user.workingDays || user.workingDays.length === 0) {
-      // Default: Saturday and Sunday are non-working
-      const dayOfWeek = date.getDay();
-      return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
-    }
-
-    // Map day index to day name
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const dayName = dayNames[date.getDay()];
-
-    // If the day is NOT in the user's working days, it's a non-working day
-    return !user.workingDays.includes(dayName);
-  };
+  // const isNonWorkingDay = (date, user) => ... (Moved to utils)
 
 
 
-
-  useEffect(() => {
-    loadUsers();
-    loadLeaves();
-  }, []);
 
   // Update filtered category when type changes
   useEffect(() => {
@@ -111,7 +105,8 @@ export default function UserDashboard() {
 
   async function loadUsers() {
     try {
-      const snapshot = await getDocs(collection(db, "users"));
+      const q = query(collection(db, "users"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
       const usersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setUsers(usersData);
       if (currentUserId) {
@@ -125,47 +120,13 @@ export default function UserDashboard() {
 
   async function loadLeaves() {
     try {
-      const snapshot = await getDocs(collection(db, "leaveRequests"));
+      const q = query(collection(db, "leaveRequests"), where("orgId", "==", orgId));
+      const snapshot = await getDocs(q);
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setLeaves(docs);
     } catch (err) {
       console.error("Error loading leaves:", err);
     }
-  }
-
-  // Helper: Calculate business days based on user's schedule, excluding Public Holidays
-  function calculateLeaveDuration(fromStr, toStr, isSingleDay, singleDayType, startType, endType) {
-    const start = new Date(fromStr);
-    const end = new Date(toStr);
-    let totalDays = 0;
-    let curr = new Date(start);
-
-    // Normalize dates to handle simple comparison
-    const startStr = start.toDateString();
-    const endStr = end.toDateString();
-
-    while (curr <= end) {
-      const dateStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
-
-      // If it's NOT a non-working day AND NOT a holiday
-      if (!isNonWorkingDay(curr, currentUserData) && !holidays[dateStr]) {
-        let dayValue = 1; // Default full day
-
-        // Logic for single day request
-        if (isSingleDay) {
-          if (singleDayType !== "Full Day") dayValue = 0.5;
-        }
-        // Logic for multi-day range
-        else {
-          if (curr.toDateString() === startStr && startType !== "Full Day") dayValue = 0.5;
-          else if (curr.toDateString() === endStr && endType !== "Full Day") dayValue = 0.5;
-        }
-
-        totalDays += dayValue;
-      }
-      curr.setDate(curr.getDate() + 1);
-    }
-    return totalDays;
   }
 
   // Calculate leave balance for current user
@@ -183,7 +144,7 @@ export default function UserDashboard() {
       .reduce((sum, l) => {
         // Handle legacy and new structure
         const isSingle = l.from === l.to;
-        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day");
+        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", currentUserData, holidays);
       }, 0);
 
     return { total, used, remaining: total - used };
@@ -262,7 +223,7 @@ export default function UserDashboard() {
     if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
 
     // Calculate requested duration using business days logic
-    const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isSingleDay, timePeriod, startHalfType, endHalfType);
+    const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isSingleDay, timePeriod, startHalfType, endHalfType, currentUserData, holidays);
 
     if (requestedDays === 0) {
       return toast.error("Selected dates are non-working days or holidays.");
@@ -282,7 +243,7 @@ export default function UserDashboard() {
       })
       .reduce((sum, l) => {
         const isSingle = l.from === l.to;
-        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day");
+        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", currentUserData, holidays);
       }, 0);
 
     const availableBalance = total - used - pendingUsage;
@@ -307,6 +268,7 @@ export default function UserDashboard() {
     const leave = {
       userId: currentUserData.id, // Standardize on Firestore ID
       userName: currentUserData.name || "Unknown User",
+      orgId: orgId, // <--- Link to Org
       from: fromDateStr,
       to: toDateStr,
       type: categoryInfo.type,
