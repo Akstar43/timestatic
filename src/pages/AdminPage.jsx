@@ -53,6 +53,7 @@ export default function Admin() {
   // Leave Management
   const [leaveDays, setLeaveDays] = useState("");
   const [workingDays, setWorkingDays] = useState([]);
+  const [halfWorkingDays, setHalfWorkingDays] = useState([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [timePeriod, setTimePeriod] = useState("Full Day"); // Demo for single day or legacy
@@ -175,8 +176,10 @@ export default function Admin() {
       const user = users.find(u => u.id === selectedUser);
       // Default to empty array if undefined
       setWorkingDays(user?.workingDays || []);
+      setHalfWorkingDays(user?.halfWorkingDays || []);
     } else {
       setWorkingDays([]);
+      setHalfWorkingDays([]);
     }
   }, [selectedUser, users]);
 
@@ -520,8 +523,8 @@ export default function Admin() {
   async function saveWorkingDays() {
     if (!selectedUser) return toast.error("Select user");
     try {
-      await updateDoc(doc(db, "users", selectedUser), { workingDays });
-      setUsers(prev => prev.map(u => u.id === selectedUser ? { ...u, workingDays } : u));
+      await updateDoc(doc(db, "users", selectedUser), { workingDays, halfWorkingDays });
+      setUsers(prev => prev.map(u => u.id === selectedUser ? { ...u, workingDays, halfWorkingDays } : u));
       // Keep existing displayed days
       toast.success("Working days saved");
     } catch {
@@ -1303,31 +1306,64 @@ export default function Admin() {
                   </div>
 
                   <div className="border-t border-slate-200 dark:border-white/5 pt-6 sm:pt-8">
-                    <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Working Days</h2>
-                    <div className="flex flex-wrap gap-3 mb-6">
-                      {WEEK.map(day => (
-                        <label key={day} className={`
-                          cursor-pointer px-3 py-2 rounded-lg border transition-all select-none
-                          ${workingDays.includes(day)
-                            ? 'bg-primary-500/20 border-primary-500 text-primary-500 dark:text-primary-300'
-                            : 'bg-slate-50 dark:bg-dark-bg border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-white/30'}
-                        `}>
-                          <input
-                            type="checkbox"
-                            className="hidden"
-                            checked={workingDays.includes(day)}
-                            onChange={() => toggleDay(day)}
-                          />
-                          {day}
-                        </label>
-                      ))}
+                    <h2 className="text-lg sm:text-xl font-heading font-semibold mb-4 sm:mb-6">Working Days Schedule</h2>
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-4 mb-6">
+                        {WEEK.map(day => {
+                          const isWorking = workingDays.includes(day);
+                          const isHalf = halfWorkingDays.includes(day);
+
+                          return (
+                            <div key={day} className={`
+                              flex flex-col p-3 rounded-lg border transition-all select-none
+                              ${isWorking
+                                ? 'bg-primary-50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-500/20'
+                                : 'bg-slate-50 dark:bg-dark-bg border-slate-200 dark:border-white/10 opacity-60'}
+                            `}>
+                              {/* Working Day Toggle */}
+                              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                                  checked={isWorking}
+                                  onChange={() => toggleDay(day)}
+                                />
+                                <span className={`font-medium ${isWorking ? 'text-primary-700 dark:text-primary-300' : 'text-slate-500'}`}>
+                                  {day}
+                                </span>
+                              </label>
+
+                              {/* Half Day Toggle (Only if Working) */}
+                              <label className={`flex items-center gap-2 cursor-pointer text-xs ${!isWorking ? 'pointer-events-none opacity-40' : ''}`}>
+                                <input
+                                  type="checkbox"
+                                  className="w-3 h-3 text-secondary-600 rounded focus:ring-secondary-500"
+                                  checked={isHalf}
+                                  onChange={() => {
+                                    if (!isWorking) return;
+                                    setHalfWorkingDays(prev =>
+                                      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                                    );
+                                  }}
+                                  disabled={!isWorking}
+                                />
+                                <span className="text-slate-600 dark:text-slate-400">Half Day</span>
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
+
                     <button
                       className="w-full bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium transition-colors"
                       onClick={saveWorkingDays}
                     >
                       Update Schedule
                     </button>
+                    <p className="mt-3 text-xs text-slate-500 dark:text-slate-400 italic text-center">
+                      * Half-days (e.g. Saturdays) count as 0.5 days when booking leave.
+                    </p>
                   </div>
                 </div>
 
