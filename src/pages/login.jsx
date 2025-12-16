@@ -83,15 +83,34 @@ export default function Login() {
       }
 
       // Get the user document
+      // Get the user document
       const userDoc = snapshot.docs[0];
       const userData = userDoc.data();
 
-      // Always update Google photoURL and UID on login
-      await updateDoc(doc(db, "users", userDoc.id), {
-        uid: user.uid,
-        photoURL: user.photoURL || userData.photoURL || "",
-        name: userData.name || user.displayName || user.email.split('@')[0]
-      });
+      // Check if Migration is needed (Doc ID != Auth UID)
+      if (userDoc.id !== user.uid) {
+        console.log("Migrating user document to Auth UID...");
+
+        // 1. Create new doc with correct ID
+        await setDoc(doc(db, "users", user.uid), {
+          ...userData,
+          uid: user.uid,
+          photoURL: user.photoURL || userData.photoURL || "",
+          name: userData.name || user.displayName || user.email.split('@')[0]
+        });
+
+        // 2. Delete old doc
+        await import("firebase/firestore").then(({ deleteDoc }) => deleteDoc(doc(db, "users", userDoc.id)));
+
+        console.log("Migration complete.");
+      } else {
+        // Standard Update
+        await updateDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          photoURL: user.photoURL || userData.photoURL || "",
+          name: userData.name || user.displayName || user.email.split('@')[0]
+        });
+      }
 
       const userRole = userData.role || "user";
       navigate(userRole === "admin" ? "/admin" : "/user-dashboard");

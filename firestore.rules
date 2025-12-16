@@ -40,11 +40,7 @@ service cloud.firestore {
 
     // 1. USERS Collection
     match /users/{userId} {
-      // READ: 
-      // 1. Authenticated users can read their own data
-      // 2. Organization members can read data from their org (Team View)
-      // 3. Super Admin can read everything
-      // 4. Unauthenticated/Anon users can QUERY by email (limit 1) to find account for login
+      // READ
       allow read: if (isAuthenticated() && (
         resource.data.uid == request.auth.uid || 
         request.auth.uid == userId ||
@@ -55,35 +51,30 @@ service cloud.firestore {
         request.query.limit <= 1
       );
       
-      // CREATE: 
-      // 1. Signup (Standard Auth)
-      // 2. Shadow Doc creation (Anonymous Auth, isShadow=true, matches UID)
+      // CREATE
       allow create: if isAuthenticated() || (
         request.auth.token.firebase.sign_in_provider == 'anonymous' &&
         request.resource.data.isShadow == true &&
         request.resource.data.uid == request.auth.uid
       ); 
       
-      // UPDATE: 
+      // UPDATE
       allow update: if 
-        // Case 1: Super Admin
         isSuperAdmin() ||
-        // Case 2: Org Admin (Managing users in same org)
         (isAdmin() && resource.data.orgId == getOrgId()) ||
-        // Case 3: Self Update (Standard OR Shadow User updating their own doc)
-        // Removed 'email != null' check to allow Shadow Users to update themselves
-        (isAuthenticated() && request.auth.uid == resource.data.uid) ||
-        // Case 4: OTP Request (Unauthenticated - sets OTP code on ANY user doc via email lookup)
+        // Self Update: Allow update if NOT changing role or orgId
+        (isAuthenticated() && request.auth.uid == resource.data.uid && 
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'orgId'])) ||
+        // OTP Request
         (!isAuthenticated() && 
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['loginOTP', 'loginOTPExpires'])
         ) ||
-        // Case 5: OTP Verify Link (Anonymous User linking their UID to existing Account)
-        // Here, auth.uid (Anon) DOES NOT match resource.uid (Old), so we need this explicit rule.
+        // OTP Verify Link
         (isAuthenticated() && request.auth.token.firebase.sign_in_provider == 'anonymous' &&
          request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'loginOTP', 'loginOTPExpires'])
         );
       
-      // DELETE: Admin (same org) or Super Admin
+      // DELETE
       allow delete: if (isAdmin() && resource.data.orgId == getOrgId()) || isSuperAdmin();
     }
 
@@ -95,7 +86,10 @@ service cloud.firestore {
       // Update: Admin (Approval) OR User (Cancel own request)
       allow update: if isAuthenticated() && (
          (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin())) || 
-         (resource.data.userId == request.auth.uid)
+         (resource.data.userId == request.auth.uid && 
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']) &&
+          request.resource.data.status == 'Cancelled'
+         )
       );
 
       allow delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
@@ -103,14 +97,9 @@ service cloud.firestore {
 
     // 3. ORGANIZATIONS
     match /organizations/{orgId} {
-      // Read: Member of Org OR Super Admin
-      allow read: if isAuthenticated() && (orgId == getOrgId() || isSuperAdmin());
-      
-      // Create: Open for new Signups
+      allow read: if isAuthenticated() && (orgId == getOrgId() || resource.data.ownerId == request.auth.uid || isSuperAdmin());
       allow create: if isAuthenticated();
-      
-      // Update: Admin of that Org
-      allow update, delete: if isAdmin() && (orgId == getOrgId() || isSuperAdmin());
+      allow update, delete: if (isAdmin() && orgId == getOrgId()) || isSuperAdmin();
     }
 
     // 4. PUBLIC HOLIDAYS
@@ -129,9 +118,9 @@ service cloud.firestore {
 
     // 6. INVITATIONS
     match /invitations/{inviteId} {
-       allow read: if true; // Open read for verifying invite codes
+       allow read: if true; 
        allow create: if isAdmin() && createsInMyOrg();
-       allow update: if true; // Allow claiming invites (status updates)
+       allow update: if true; 
     }
   }
 }
