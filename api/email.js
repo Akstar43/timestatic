@@ -1,12 +1,12 @@
-const { Resend } = require('resend');
+const SibApiV3Sdk = require('@getbrevo/brevo');
 
 console.log("Email API loaded");
-console.log("RESEND_API_KEY present:", !!process.env.RESEND_API_KEY);
+console.log("BREVO_API_KEY present:", !!process.env.BREVO_API_KEY);
 
 // Helper to handle CORS
 const allowCors = fn => async (req, res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Adjust this in production if needed
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader(
         'Access-Control-Allow-Headers',
@@ -34,44 +34,39 @@ const handler = async (req, res) => {
     }
 
     // Check for environment variable
-    if (!process.env.RESEND_API_KEY) {
-        console.error('Missing RESEND_API_KEY environment variable');
+    if (!process.env.BREVO_API_KEY) {
+        console.error('Missing BREVO_API_KEY environment variable');
         return res.status(500).json({
             success: false,
-            error: 'Server configuration error: Missing RESEND_API_KEY. Please configure environment variables.',
+            error: 'Server configuration error: Missing BREVO_API_KEY. Please configure environment variables.',
             debug: {
-                RESEND_API_KEY: false
+                BREVO_API_KEY: false
             }
         });
     }
 
-    // Initialize Resend
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    // Initialize Brevo
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.sender = { name: "TimeAway System", email: "noreply@timeaway.app" };
+    sendSmtpEmail.to = [{ email: to }];
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html || text;
+    if (text && html) {
+        sendSmtpEmail.textContent = text;
+    }
 
     try {
-        const { data, error } = await resend.emails.send({
-            from: 'TimeAway System <onboarding@resend.dev>', // Use onboarding domain for testing
-            to,
-            subject,
-            html: html || text,
-            text: text || undefined
-        });
-
-        if (error) {
-            console.error('Resend API error:', error);
-            return res.status(500).json({
-                success: false,
-                error: error.message || 'Failed to send email'
-            });
-        }
-
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
         console.log('Email sent successfully:', data);
         res.status(200).json({ success: true, message: 'Email sent', data });
     } catch (error) {
-        console.error('Email send error:', error);
+        console.error('Brevo API error:', error);
         res.status(500).json({
             success: false,
-            error: error.message || 'Unknown error occurred'
+            error: error.message || 'Failed to send email'
         });
     }
 };
