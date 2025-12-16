@@ -50,7 +50,7 @@ const handler = async (req, res) => {
     apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.sender = { name: "TimeAway System", email: "noreply@timeaway.app" };
+    sendSmtpEmail.sender = { name: "TimeAway System", email: "akmusajee53@gmail.com" };
     sendSmtpEmail.to = [{ email: to }];
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = html || text;
