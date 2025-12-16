@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 
 const OrganizationContext = createContext();
@@ -25,11 +25,13 @@ export function OrganizationProvider({ children }) {
 
             try {
                 setLoading(true);
-                // 1. Get User Document to find the orgId
-                const userDocRef = doc(db, "users", currentUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
+                // 1. Get User Document by UID (Query instead of direct Get, for OTP support)
+                // Note: ensuring limit(1) so it works with strict keys
+                const q = query(collection(db, "users"), where("uid", "==", currentUser.uid), limit(1));
+                const querySnapshot = await getDocs(q);
 
-                if (userDocSnap.exists()) {
+                if (!querySnapshot.empty) {
+                    const userDocSnap = querySnapshot.docs[0];
                     const userData = userDocSnap.data();
                     const orgId = userData.orgId;
 
