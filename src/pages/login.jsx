@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
-import { collection, getDocs, query, where, doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, setDoc, serverTimestamp, limit } from "firebase/firestore";
 import { db, googleProvider } from "../firebase/firebase";
 import { signInWithPopup, signInAnonymously, getAuth } from "firebase/auth";
 import { sendOTPEmail } from "../services/emailService";
@@ -112,7 +112,7 @@ export default function Login() {
     setError("");
 
     try {
-      const q = query(collection(db, "users"), where("email", "==", email));
+      const q = query(collection(db, "users"), where("email", "==", email), limit(1));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
@@ -153,7 +153,7 @@ export default function Login() {
     setError("");
 
     try {
-      const q = query(collection(db, "users"), where("email", "==", email));
+      const q = query(collection(db, "users"), where("email", "==", email), limit(1));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
