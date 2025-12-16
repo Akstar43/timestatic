@@ -42,8 +42,19 @@ export function OrganizationProvider({ children }) {
                     if (orgDocSnap.exists()) {
                         setOrg({ id: orgDocSnap.id, ...orgDocSnap.data() });
                     } else {
-                        console.warn(`Organization ${orgId} not found for user ${currentUser.uid}`);
-                        setError("Organization not found");
+                        // Special Fallback for Master Admin if doc is missing
+                        if (orgId === "MASTER_ADMIN") {
+                            console.log("Auto-generating Master Admin Org context");
+                            setOrg({
+                                id: "MASTER_ADMIN",
+                                name: "System Administrator",
+                                ownerId: currentUser.uid,
+                                settings: { allowAdminsToBook: true } // Default settings
+                            });
+                        } else {
+                            console.warn(`Organization ${orgId} not found for user ${currentUser.uid}`);
+                            setError("Organization not found");
+                        }
                     }
                 } else {
                     console.log("User has no orgId assigned");

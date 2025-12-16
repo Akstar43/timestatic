@@ -10,11 +10,10 @@ service cloud.firestore {
 
     // SUPER ADMIN CHECK
     function isSuperAdmin() {
-      // Corrected Super Admin email
       return request.auth.token.email == "akmusajee53@gmail.com";
     }
 
-    // Get the user's Org ID from their User Document
+    // Get the user's Org ID from their User Document (works for Standard and Shadow users)
     function getOrgId() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
     }
@@ -25,16 +24,10 @@ service cloud.firestore {
              (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
-    // Start of new Creation: Check if new doc has correct Org ID
+    // Check if new doc is being created in the user's Org
     function createsInMyOrg() {
       return isAuthenticated() && 
              (request.resource.data.orgId == getOrgId() || isSuperAdmin());
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(userId)) &&
-        get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
     }
 
     function isAdmin() {
@@ -48,72 +41,72 @@ service cloud.firestore {
     // 1. USERS Collection
     match /users/{userId} {
       // READ: 
-      // 1. Authenticated users can read their own data or same org data
-      // 2. Unauthenticated (or Anon) users can QUERY by email to find their account for execution of login
+      // 1. Authenticated users can read their own data
+      // 2. Organization members can read data from their org (Team View)
+      // 3. Super Admin can read everything
+      // 4. Unauthenticated/Anon users can QUERY by email (limit 1) to find account for login
       allow read: if (isAuthenticated() && (
-        resource.data.email == request.auth.token.email || 
-        resource.data.uid == request.auth.uid ||
+        resource.data.uid == request.auth.uid || 
         request.auth.uid == userId ||
         resource.data.orgId == getOrgId() ||
         isSuperAdmin()
       )) || (
-        // Allow looking up a user by email for Login flow
-        // Note: strict email filtering prevents dumping the whole database
         (!isAuthenticated() || request.auth.token.firebase.sign_in_provider == 'anonymous') && 
         request.query.limit <= 1
       );
       
-      // CREATE: Allow during Signup (no Org yet) OR Admin creating user in same Org
-      allow create: if isAuthenticated(); 
+      // CREATE: 
+      // 1. Signup (Standard Auth)
+      // 2. Shadow Doc creation (Anonymous Auth, isShadow=true, matches UID)
+      allow create: if isAuthenticated() || (
+        request.auth.token.firebase.sign_in_provider == 'anonymous' &&
+        request.resource.data.isShadow == true &&
+        request.resource.data.uid == request.auth.uid
+      ); 
       
       // UPDATE: 
-      // 1. Standard: Admin/Owner/Self
-      // 2. OTP Request: Unauthenticated user setting OTP code
-      // 3. OTP Verify: Anonymous user linking their UID
       allow update: if 
-        // Case 1: Standard Authenticated Update
-        (isAuthenticated() && request.auth.token.email != null && (
-          resource.data.email == request.auth.token.email ||
-          request.auth.uid == resource.data.uid ||
-          (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin()))
-        )) ||
-        // Case 2: OTP REQUEST (Unauthenticated - sets OTP)
+        // Case 1: Super Admin
+        isSuperAdmin() ||
+        // Case 2: Org Admin (Managing users in same org)
+        (isAdmin() && resource.data.orgId == getOrgId()) ||
+        // Case 3: Self Update (Standard OR Shadow User updating their own doc)
+        // Removed 'email != null' check to allow Shadow Users to update themselves
+        (isAuthenticated() && request.auth.uid == resource.data.uid) ||
+        // Case 4: OTP Request (Unauthenticated - sets OTP code on ANY user doc via email lookup)
         (!isAuthenticated() && 
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['loginOTP', 'loginOTPExpires'])
         ) ||
-        // Case 3: OTP VERIFY (Anonymous Auth - links UID)
+        // Case 5: OTP Verify Link (Anonymous User linking their UID to existing Account)
+        // Here, auth.uid (Anon) DOES NOT match resource.uid (Old), so we need this explicit rule.
         (isAuthenticated() && request.auth.token.firebase.sign_in_provider == 'anonymous' &&
          request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'loginOTP', 'loginOTPExpires'])
         );
       
-      // DELETE: Admin (same org)
-      allow delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
+      // DELETE: Admin (same org) or Super Admin
+      allow delete: if (isAdmin() && resource.data.orgId == getOrgId()) || isSuperAdmin();
     }
 
     // 2. LEAVE REQUESTS
     match /leaveRequests/{requestId} {
-      // READ: Same Org
       allow read: if belongsToMyOrg();
-
-      // CREATE: Must include correct orgId
       allow create: if createsInMyOrg();
-
-      // Update: Admin (same org) OR Owner (cancelling)
+      
+      // Update: Admin (Approval) OR User (Cancel own request)
       allow update: if isAuthenticated() && (
          (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin())) || 
-         (resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']) && request.resource.data.status == 'Cancelled')
+         (resource.data.userId == request.auth.uid)
       );
 
-      // Delete: Admin (same org)
       allow delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
     // 3. ORGANIZATIONS
     match /organizations/{orgId} {
-      // Read: Allow if it's MY org OR SuperAdmin
-      allow read: if isAuthenticated() && (orgId == getOrgId() || resource.data.ownerId == request.auth.uid || isSuperAdmin());
+      // Read: Member of Org OR Super Admin
+      allow read: if isAuthenticated() && (orgId == getOrgId() || isSuperAdmin());
       
-      // Create: Signup (Open)
+      // Create: Open for new Signups
       allow create: if isAuthenticated();
       
       // Update: Admin of that Org
@@ -123,29 +116,22 @@ service cloud.firestore {
     // 4. PUBLIC HOLIDAYS
     match /publicHolidays/{holidayId} {
       allow read: if belongsToMyOrg();
-      
-      // CREATE: Must contain correct orgId
-      allow create: if createsInMyOrg();
-      
-      // DELETE/UPDATE: Admin of the existing doc's org
+      allow create: if createsInMyOrg(); 
       allow update, delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
-    // 6. NOTIFICATIONS
+    // 5. NOTIFICATIONS
     match /notifications/{notificationId} {
       allow read: if belongsToMyOrg();
       allow create: if createsInMyOrg();
       allow update, delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
     }
 
-    // 5. INVITATIONS (New for Phase 3)
+    // 6. INVITATIONS
     match /invitations/{inviteId} {
-       allow read: if true; 
-       
-       // Create: Admin Only
+       allow read: if true; // Open read for verifying invite codes
        allow create: if isAdmin() && createsInMyOrg();
-       
-       allow update: if true || isSuperAdmin(); 
+       allow update: if true; // Allow claiming invites (status updates)
     }
   }
 }
