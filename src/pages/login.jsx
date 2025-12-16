@@ -7,10 +7,12 @@ import { db, googleProvider } from "../firebase/firebase";
 import { signInWithPopup, signInAnonymously, getAuth } from "firebase/auth";
 import { sendOTPEmail } from "../services/emailService";
 import { useAuth } from "../context/AuthContext";
+import { useOrganization } from "../context/OrganizationContext";
 
 export default function Login() {
   const navigate = useNavigate();
   const { currentUser } = useAuth(); // Get current auth state
+  const { reloadOrganization } = useOrganization();
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -205,6 +207,9 @@ export default function Login() {
         isShadow: true,
         referenceId: userDoc.id // Pointer to real data
       });
+      // Force Org Context to reload now that Shadow Doc exists (fixing race condition)
+      if (reloadOrganization) await reloadOrganization();
+
       console.log("UID Linked. Redirecting...");
 
       // Clear local fields
@@ -214,7 +219,6 @@ export default function Login() {
       const userRole = userData.role || "user";
       console.log("Redirecting to:", userRole === "admin" ? "/admin" : "/user-dashboard");
       navigate(userRole === "admin" ? "/admin" : "/user-dashboard");
-
     } catch (err) {
       console.error("OTP Error:", err);
       setError("Verification failed. Please try again.");
