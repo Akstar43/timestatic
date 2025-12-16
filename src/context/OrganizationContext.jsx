@@ -15,84 +15,65 @@ export function OrganizationProvider({ children }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-}
+    const loadOrganization = async () => {
+        if (!currentUser) {
+            setOrg(null);
+            setLoading(false);
+            return;
+        }
 
-loadOrganization();
-    }, [currentUser]);
+        try {
+            setLoading(true);
+            // 1. Get User Document by UID (Query instead of direct Get, for OTP support)
+            // Note: ensuring limit(1) so it works with strict keys
+            const q = query(collection(db, "users"), where("uid", "==", currentUser.uid), limit(1));
+            const querySnapshot = await getDocs(q);
 
-const reloadOrganization = () => {
-    setLoading(true);
-    setError("");
-    // Re-trigger the effect by effectively "refreshing" logic, 
-    // but easier to just extract load function. 
-    // For simplicity, let's just expose a function that duplicates the check or sets a trigger.
-    // Actually, best way: 
-    const fetchNow = async () => {
-        // ... logic ...
-        // To avoid code duplication, let's just refactor 'loadOrganization' out of useEffect.
-    };
-};
+            if (!querySnapshot.empty) {
+                const userDocSnap = querySnapshot.docs[0];
+                const userData = userDocSnap.data();
+                const orgId = userData.orgId;
 
-// Better refactor:
-const loadOrganization = async () => {
-    if (!currentUser) {
-        setOrg(null);
-        setLoading(false);
-        return;
-    }
+                if (orgId) {
+                    // 2. Get Organization Document
+                    const orgDocRef = doc(db, "organizations", orgId);
+                    const orgDocSnap = await getDoc(orgDocRef);
 
-    try {
-        setLoading(true);
-        // 1. Get User Document by UID (Query instead of direct Get, for OTP support)
-        // Note: ensuring limit(1) so it works with strict keys
-        const q = query(collection(db, "users"), where("uid", "==", currentUser.uid), limit(1));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-            const userDocSnap = querySnapshot.docs[0];
-            const userData = userDocSnap.data();
-            const orgId = userData.orgId;
-
-            if (orgId) {
-                // 2. Get Organization Document
-                const orgDocRef = doc(db, "organizations", orgId);
-                const orgDocSnap = await getDoc(orgDocRef);
-
-                if (orgDocSnap.exists()) {
-                    setOrg({ id: orgDocSnap.id, ...orgDocSnap.data() });
+                    if (orgDocSnap.exists()) {
+                        setOrg({ id: orgDocSnap.id, ...orgDocSnap.data() });
+                    } else {
+                        console.warn(`Organization ${orgId} not found for user ${currentUser.uid}`);
+                        setError("Organization not found");
+                    }
                 } else {
-                    console.warn(`Organization ${orgId} not found for user ${currentUser.uid}`);
-                    setError("Organization not found");
+                    console.log("User has no orgId assigned");
+                    setOrg(null);
                 }
             } else {
-                console.log("User has no orgId assigned");
                 setOrg(null);
             }
-        } else {
-            setOrg(null);
+        } catch (err) {
+            console.error("Failed to load organization:", err);
+            setError(err.message);
+        } finally {
+            setLoading(false);
         }
-    } catch (err) {
-        console.error("Failed to load organization:", err);
-        setError(err.message);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
-useEffect(() => {
-    loadOrganization();
-}, [currentUser]);
+    useEffect(() => {
+        loadOrganization();
+    }, [currentUser]);
 
-const value = {
-    org,
-    loading,
-    error,
-    reloadOrganization: loadOrganization
-};
+    const value = {
+        org,
+        loading,
+        error,
+        reloadOrganization: loadOrganization
+    };
 
-return (
-    <OrganizationContext.Provider value={value}>
-        {!loading && children}
-    </OrganizationContext.Provider>
-);
+    return (
+        <OrganizationContext.Provider value={value}>
+            {!loading && children}
+        </OrganizationContext.Provider>
+    );
 }
