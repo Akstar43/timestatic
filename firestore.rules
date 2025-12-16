@@ -11,7 +11,6 @@ service cloud.firestore {
     // SUPER ADMIN CHECK
     function isSuperAdmin() {
       // Updated to your verified email
-      return request.auth.token.email == "abdulkadirmusajee53@gmail.com"; 
     }
 
     // Get the user's Org ID from their User Document
