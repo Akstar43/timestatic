@@ -1,8 +1,7 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-console.log("Function loaded");
-console.log("GMAIL_USER present:", !!process.env.GMAIL_USER);
-console.log("GMAIL_PASS present:", !!process.env.GMAIL_PASS);
+console.log("Email API loaded");
+console.log("RESEND_API_KEY present:", !!process.env.RESEND_API_KEY);
 
 // Helper to handle CORS
 const allowCors = fn => async (req, res) => {
@@ -28,47 +27,54 @@ const handler = async (req, res) => {
     const { to, subject, html, text } = req.body;
 
     if (!to || !subject || (!html && !text)) {
-        return res.status(400).send('Missing required fields');
+        return res.status(400).json({
+            success: false,
+            error: 'Missing required fields: to, subject, and html/text are required'
+        });
     }
 
-    // Check for environment variables
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
-        console.error('Missing credentials!');
-        console.error('GMAIL_USER:', process.env.GMAIL_USER ? 'SET' : 'MISSING');
-        console.error('GMAIL_PASS:', process.env.GMAIL_PASS ? 'SET' : 'MISSING');
+    // Check for environment variable
+    if (!process.env.RESEND_API_KEY) {
+        console.error('Missing RESEND_API_KEY environment variable');
         return res.status(500).json({
             success: false,
-            error: 'Server configuration error: Missing email credentials. Please check environment variables.',
+            error: 'Server configuration error: Missing RESEND_API_KEY. Please configure environment variables.',
             debug: {
-                GMAIL_USER: !!process.env.GMAIL_USER,
-                GMAIL_PASS: !!process.env.GMAIL_PASS
+                RESEND_API_KEY: false
             }
         });
     }
 
-    // Configure Transporter (Gmail)
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.GMAIL_USER, // Your Gmail
-            pass: process.env.GMAIL_PASS  // Your App Password
-        }
-    });
+    // Initialize Resend
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
     try {
-        await transporter.sendMail({
-            from: `"TimeAway System" <${process.env.GMAIL_USER}>`,
+        const { data, error } = await resend.emails.send({
+            from: 'TimeAway System <onboarding@resend.dev>', // Use onboarding domain for testing
             to,
             subject,
-            text: text || "",
-            html: html || text
+            html: html || text,
+            text: text || undefined
         });
 
-        res.status(200).json({ success: true, message: 'Email sent' });
+        if (error) {
+            console.error('Resend API error:', error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || 'Failed to send email'
+            });
+        }
+
+        console.log('Email sent successfully:', data);
+        res.status(200).json({ success: true, message: 'Email sent', data });
     } catch (error) {
         console.error('Email send error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Unknown error occurred'
+        });
     }
 };
 
 module.exports = allowCors(handler);
+
