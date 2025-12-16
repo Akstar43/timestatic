@@ -1,6 +1,8 @@
 const SibApiV3Sdk = require('@getbrevo/brevo');
 
 console.log("Email API loaded");
+console.log("Email API Version: 2.0 (Debug)");
+
 
 // Helper to handle CORS
 const allowCors = fn => async (req, res) => {
