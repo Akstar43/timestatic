@@ -108,7 +108,8 @@ export default function UserDashboard() {
       const q = query(collection(db, "users"), where("orgId", "==", orgId));
       const snapshot = await getDocs(q);
       const usersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setUsers(usersData);
+      // Filter out Shadow Docs (OTP Bridges)
+      setUsers(usersData.filter(u => !u.isShadow));
       if (currentUserId) {
         const authUser = auth.currentUser;
         setCurrentUserData(usersData.find(u => u.uid === currentUserId || (authUser?.email && u.email?.toLowerCase() === authUser.email.toLowerCase())) || null);

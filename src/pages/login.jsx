@@ -192,6 +192,19 @@ export default function Login() {
         loginOTP: null, // Clear OTP
         loginOTPExpires: null
       });
+
+      // Create a "Shadow" User Doc with the Anonymous UID
+      // This is REQUIRED because firestore.rules checks users/{auth.uid} to find the orgId.
+      // Since Anon UID != Original Doc ID, we need this bridge doc.
+      await setDoc(doc(db, "users", anonUser.uid), {
+        uid: anonUser.uid,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        orgId: userData.orgId,
+        isShadow: true,
+        referenceId: userDoc.id // Pointer to real data
+      });
       console.log("UID Linked. Redirecting...");
 
       // Clear local fields
