@@ -177,28 +177,33 @@ export default function Login() {
         return;
       }
 
+      console.log("OTP Valid. Signing in anonymously...");
       // Valid OTP
       const auth = getAuth();
       // Sign in anonymously to establish a session
       const result = await signInAnonymously(auth);
       const anonUser = result.user;
+      console.log("Signed in as:", anonUser.uid);
 
       // Link this anonymous session to the User Document by updating the UID
+      console.log("Linking UID to user doc...");
       await updateDoc(doc(db, "users", userDoc.id), {
         uid: anonUser.uid,
         loginOTP: null, // Clear OTP
         loginOTPExpires: null
       });
+      console.log("UID Linked. Redirecting...");
 
       // Clear local fields
       setOtp("");
       setShowOTPInput(false);
 
       const userRole = userData.role || "user";
+      console.log("Redirecting to:", userRole === "admin" ? "/admin" : "/user-dashboard");
       navigate(userRole === "admin" ? "/admin" : "/user-dashboard");
 
     } catch (err) {
-      console.error(err);
+      console.error("OTP Error:", err);
       setError("Verification failed. Please try again.");
     } finally {
       setIsLoading(false);
