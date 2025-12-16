@@ -44,7 +44,8 @@ const handler = async (req, res) => {
         console.log('API Key length:', API_KEY.length);
         console.log('API Key prefix:', API_KEY.substring(0, 10) + '...');
     }
-    console.log('All env vars:', Object.keys(process.env).filter(k => k.includes('BREVO')));
+    console.log('All env vars (Keys only):', Object.keys(process.env).sort());
+    console.log('BREVO-related vars:', Object.keys(process.env).filter(k => k.toUpperCase().includes('BREVO')));
 
     // Check for environment variable
     if (!API_KEY) {
