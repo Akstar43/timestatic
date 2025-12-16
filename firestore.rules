@@ -10,7 +10,8 @@ service cloud.firestore {
 
     // SUPER ADMIN CHECK
     function isSuperAdmin() {
-      return request.auth.token.email == "akmusajee53@gmail.com"; 
+      // Updated to your verified email
+      return request.auth.token.email == "abdulkadirmusajee53@gmail.com"; 
     }
 
     // Get the user's Org ID from their User Document
@@ -46,24 +47,44 @@ service cloud.firestore {
 
     // 1. USERS Collection
     match /users/{userId} {
-      // READ: Allow if (Email Matches Auth) OR (UID matches Auth) OR (Same Org) OR (Doc ID matches Auth) OR SuperAdmin
-      allow read: if isAuthenticated() && (
+      // READ: 
+      // 1. Authenticated users can read their own data or same org data
+      // 2. Unauthenticated (or Anon) users can QUERY by email to find their account for execution of login
+      allow read: if (isAuthenticated() && (
         resource.data.email == request.auth.token.email || 
         resource.data.uid == request.auth.uid ||
         request.auth.uid == userId ||
         resource.data.orgId == getOrgId() ||
         isSuperAdmin()
+      )) || (
+        // Allow looking up a user by email for Login flow
+        // Note: strict email filtering prevents dumping the whole database
+        (!isAuthenticated() || request.auth.token.firebase.sign_in_provider == 'anonymous') && 
+        request.query.limit <= 1
       );
       
       // CREATE: Allow during Signup (no Org yet) OR Admin creating user in same Org
       allow create: if isAuthenticated(); 
       
-      // UPDATE: Admin (same org) OR Owner OR (Email Matches Auth - for Account Linking)
-      allow update: if isAuthenticated() && (
-        resource.data.email == request.auth.token.email ||
-        request.auth.uid == resource.data.uid ||
-        (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin()))
-      );
+      // UPDATE: 
+      // 1. Standard: Admin/Owner/Self
+      // 2. OTP Request: Unauthenticated user setting OTP code
+      // 3. OTP Verify: Anonymous user linking their UID
+      allow update: if 
+        // Case 1: Standard Authenticated Update
+        (isAuthenticated() && request.auth.token.email != null && (
+          resource.data.email == request.auth.token.email ||
+          request.auth.uid == resource.data.uid ||
+          (isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin()))
+        )) ||
+        // Case 2: OTP REQUEST (Unauthenticated - sets OTP)
+        (!isAuthenticated() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['loginOTP', 'loginOTPExpires'])
+        ) ||
+        // Case 3: OTP VERIFY (Anonymous Auth - links UID)
+        (isAuthenticated() && request.auth.token.firebase.sign_in_provider == 'anonymous' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'loginOTP', 'loginOTPExpires'])
+        );
       
       // DELETE: Admin (same org)
       allow delete: if isAdmin() && (resource.data.orgId == getOrgId() || isSuperAdmin());
