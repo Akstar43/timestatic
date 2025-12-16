@@ -61,7 +61,7 @@ export const sendNewLeaveRequestEmail = async (leaveDetails, userName) => {
 
     // Hardcoded Admin Email for notification (or fetch from config)
     return sendEmailApi({
-        to: "akmusajee53@gmail.com",
+        to: "abdulkadirmusajee53@gmail.com",
         subject: `New Leave Request: ${userName}`,
         html: getNewLeaveRequestTemplate(userName, leaveDetails, approveUrl, rejectUrl)
     });
@@ -77,7 +77,7 @@ export const sendOTPEmail = async (userEmail, otp, userName) => {
 
 export const sendLeaveCancellationEmail = async (leaveDetails, userName) => {
     return sendEmailApi({
-        to: "akmusajee53@gmail.com",
+        to: "abdulkadirmusajee53@gmail.com",
         subject: `Leave Cancelled: ${userName}`,
         html: getCancellationTemplate(userName, leaveDetails)
     });

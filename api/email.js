@@ -50,7 +50,7 @@ const handler = async (req, res) => {
 
 
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.sender = { name: "TimeAway System", email: "akmusajee53@gmail.com" };
+    sendSmtpEmail.sender = { name: "TimeAway System", email: "abdulkadirmusajee53@gmail.com" };
     sendSmtpEmail.to = [{ email: to }];
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = html || text;
