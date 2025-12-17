@@ -64,7 +64,7 @@ module.exports = async function handler(req, res) {
                 },
             ],
             mode: 'subscription',
-            success_url: `${appUrl}/admin?tab=billing&success=true`,
+            success_url: `${appUrl}/admin?tab=billing&success=true&plan=${planId}`,
             cancel_url: `${appUrl}/admin?tab=billing&canceled=true`,
             client_reference_id: orgId,
             metadata: {

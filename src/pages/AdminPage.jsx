@@ -164,6 +164,41 @@ export default function Admin() {
     }
   }, [orgId, isSuperAdmin, filterOrgId]); // Reload when filter changes
 
+  // Handle successful Stripe payment
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success') === 'true' && urlParams.get('tab') === 'billing') {
+      // Payment successful - update organization
+      const updateOrgPlan = async () => {
+        try {
+          // Get the plan from URL or default to 'pro'
+          const planId = urlParams.get('plan') || 'pro';
+          const maxUsers = planId === 'pro' ? 25 : planId === 'business' ? 100 : 5;
+
+          await updateDoc(doc(db, "organizations", orgId), {
+            subscriptionPlan: planId,
+            subscriptionStatus: 'active',
+            maxUsers: maxUsers,
+            updatedAt: ts()
+          });
+
+          toast.success(`Successfully upgraded to ${planId.charAt(0).toUpperCase() + planId.slice(1)} plan!`);
+
+          // Reload org data
+          loadOrgs();
+
+          // Clean up URL
+          window.history.replaceState({}, '', '/admin?tab=billing');
+        } catch (error) {
+          console.error('Error updating plan:', error);
+          toast.error('Payment successful, but failed to update plan. Please contact support.');
+        }
+      };
+
+      updateOrgPlan();
+    }
+  }, [orgId]);
+
   // Auto-update leave type when category changes
   useEffect(() => {
     const validCategories = Object.keys(LEAVE_CATEGORIES).filter(cat => LEAVE_CATEGORIES[cat].type === leaveType);
@@ -568,6 +603,8 @@ export default function Admin() {
       const data = await response.json();
 
       if (data.url) {
+        // Store plan ID in sessionStorage so we can retrieve it after redirect
+        sessionStorage.setItem('upgradePlan', planId);
         // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else {
