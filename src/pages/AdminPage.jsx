@@ -552,6 +552,33 @@ export default function Admin() {
     toast.success("Link copied!");
   };
 
+  // ----- Stripe Checkout -----
+  const handleUpgrade = async (planId) => {
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: planId,
+          orgId: orgId,
+          orgName: org?.name || 'Organization'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+      } else {
+        toast.error('Failed to create checkout session');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast.error('Failed to start checkout. Please try again.');
+    }
+  };
+
   // ----- Leave Days -----
   async function saveLeaveDays() {
     if (!selectedUser) return toast.error("Select user");
@@ -1935,7 +1962,7 @@ export default function Admin() {
                     </li>
                   </ul>
                   <button
-                    onClick={() => toast.info('Stripe integration coming soon! Set up your API keys first.')}
+                    onClick={() => handleUpgrade('pro')}
                     className="w-full mt-6 bg-primary-600 hover:bg-primary-500 text-white py-2.5 rounded-lg font-medium shadow-lg shadow-primary-600/20 transition-all"
                   >
                     Upgrade to Pro
@@ -1968,7 +1995,7 @@ export default function Admin() {
                     </li>
                   </ul>
                   <button
-                    onClick={() => toast.info('Contact us for Business plan setup')}
+                    onClick={() => handleUpgrade('business')}
                     className="w-full mt-6 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium transition-all"
                   >
                     Upgrade to Business
