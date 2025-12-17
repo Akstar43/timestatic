@@ -1,5 +1,7 @@
 {
+    "name": "simple-login-api",
+    "version": "1.0.0",
     "dependencies": {
-        "@getbrevo/brevo": "^3.0.1"
+        "stripe": "^14.0.0"
     }
 }

@@ -8,7 +8,16 @@ const PLANS = {
     enterprise: { priceId: null, maxUsers: Infinity, name: 'Enterprise' }
 };
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -22,8 +31,13 @@ export default async function handler(req, res) {
 
         const plan = PLANS[planId];
         if (!plan || !plan.priceId) {
-            return res.status(400).json({ error: 'Invalid plan' });
+            return res.status(400).json({ error: 'Invalid plan or missing price ID' });
         }
+
+        // Get the app URL from environment or request headers
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
+            process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
+            `https://${req.headers.host}`;
 
         // Create Stripe Checkout Session
         const session = await stripe.checkout.sessions.create({
@@ -35,8 +49,8 @@ export default async function handler(req, res) {
                 },
             ],
             mode: 'subscription',
-            success_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin?tab=billing&success=true`,
-            cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin?tab=billing&canceled=true`,
+            success_url: `${appUrl}/admin?tab=billing&success=true`,
+            cancel_url: `${appUrl}/admin?tab=billing&canceled=true`,
             client_reference_id: orgId,
             metadata: {
                 orgId: orgId,
@@ -48,6 +62,6 @@ export default async function handler(req, res) {
         res.status(200).json({ sessionId: session.id, url: session.url });
     } catch (error) {
         console.error('Stripe checkout error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error.message || 'Internal server error' });
     }
-}
+};
