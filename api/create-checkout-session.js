@@ -25,13 +25,28 @@ module.exports = async function handler(req, res) {
     try {
         const { planId, orgId, orgName } = req.body;
 
+        console.log('Received request:', { planId, orgId, orgName });
+        console.log('Environment check:', {
+            hasSecretKey: !!process.env.STRIPE_SECRET_KEY,
+            hasProPrice: !!process.env.STRIPE_PRO_PRICE_ID,
+            hasBusinessPrice: !!process.env.STRIPE_BUSINESS_PRICE_ID,
+            proPriceValue: process.env.STRIPE_PRO_PRICE_ID,
+            businessPriceValue: process.env.STRIPE_BUSINESS_PRICE_ID
+        });
+
         if (!planId || !orgId) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
         const plan = PLANS[planId];
-        if (!plan || !plan.priceId) {
-            return res.status(400).json({ error: 'Invalid plan or missing price ID' });
+        if (!plan) {
+            return res.status(400).json({ error: `Invalid plan: ${planId}` });
+        }
+
+        if (!plan.priceId) {
+            return res.status(400).json({
+                error: `Missing price ID for ${planId} plan. Please add STRIPE_${planId.toUpperCase()}_PRICE_ID to Vercel environment variables.`
+            });
         }
 
         // Get the app URL from environment or request headers

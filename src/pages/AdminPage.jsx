@@ -571,7 +571,9 @@ export default function Admin() {
         // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else {
-        toast.error('Failed to create checkout session');
+        // Show the actual error message from the API
+        toast.error(data.error || 'Failed to create checkout session');
+        console.error('Checkout error:', data);
       }
     } catch (error) {
       console.error('Checkout error:', error);
