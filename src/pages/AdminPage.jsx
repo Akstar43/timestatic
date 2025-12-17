@@ -89,6 +89,7 @@ export default function Admin() {
   // Deep Link Action State
   const [actionModal, setActionModal] = useState(null); // { id, action, userDetails... }
   const [rejectionReason, setRejectionReason] = useState("");
+  const [dashboardRejectModal, setDashboardRejectModal] = useState({ open: false, id: null, reason: "" });
 
   useEffect(() => {
     const action = searchParams.get("action");
@@ -163,41 +164,6 @@ export default function Admin() {
       loadHolidays();
     }
   }, [orgId, isSuperAdmin, filterOrgId]); // Reload when filter changes
-
-  // Handle successful Stripe payment
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('success') === 'true' && urlParams.get('tab') === 'billing') {
-      // Payment successful - update organization
-      const updateOrgPlan = async () => {
-        try {
-          // Get the plan from URL or default to 'pro'
-          const planId = urlParams.get('plan') || 'pro';
-          const maxUsers = planId === 'pro' ? 25 : planId === 'business' ? 100 : 5;
-
-          await updateDoc(doc(db, "organizations", orgId), {
-            subscriptionPlan: planId,
-            subscriptionStatus: 'active',
-            maxUsers: maxUsers,
-            updatedAt: ts()
-          });
-
-          toast.success(`Successfully upgraded to ${planId.charAt(0).toUpperCase() + planId.slice(1)} plan!`);
-
-          // Reload org data
-          loadOrgs();
-
-          // Clean up URL
-          window.history.replaceState({}, '', '/admin?tab=billing');
-        } catch (error) {
-          console.error('Error updating plan:', error);
-          toast.error('Payment successful, but failed to update plan. Please contact support.');
-        }
-      };
-
-      updateOrgPlan();
-    }
-  }, [orgId]);
 
   // Auto-update leave type when category changes
   useEffect(() => {
@@ -603,8 +569,6 @@ export default function Admin() {
       const data = await response.json();
 
       if (data.url) {
-        // Store plan ID in sessionStorage so we can retrieve it after redirect
-        sessionStorage.setItem('upgradePlan', planId);
         // Redirect to Stripe Checkout
         window.location.href = data.url;
       } else {
@@ -690,7 +654,7 @@ export default function Admin() {
         type: categoryInfo.type,
         category: leaveCategory,
         reason,
-        status: "Approved", // Admin booking is auto-approved
+        status: "Pending", // Admin booking is now Pending to allow approval/rejection flow
         isSingleDay,
         halfType: isSingleDay ? timePeriod : null,
         startHalfType: !isSingleDay ? startHalfType : null,
@@ -763,6 +727,21 @@ export default function Admin() {
       toast.error("Failed to update leave status");
     }
   }
+
+  const handleRejectClick = (id) => {
+    setDashboardRejectModal({ open: true, id, reason: "" });
+  };
+
+  const confirmReject = () => {
+    if (dashboardRejectModal.id) {
+      setLeaveStatus(dashboardRejectModal.id, "Rejected", dashboardRejectModal.reason);
+      setDashboardRejectModal({ open: false, id: null, reason: "" });
+    }
+  };
+
+  const cancelReject = () => {
+    setDashboardRejectModal({ open: false, id: null, reason: "" });
+  };
 
   async function markRead(id) {
     try {
@@ -1008,6 +987,42 @@ export default function Admin() {
               >
                 Confirm {actionModal.action}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dashboard Rejection Modal */}
+      {dashboardRejectModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-md p-6 relative z-10 animate-fade-in-up border border-slate-200 dark:border-white/10">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Reject Leave Request</h3>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Please provide a reason for rejection (optional).
+              </p>
+              <textarea
+                className="w-full p-3 border border-slate-300 dark:border-white/10 rounded-lg bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none resize-none"
+                placeholder="Reason..."
+                rows={3}
+                value={dashboardRejectModal.reason}
+                onChange={e => setDashboardRejectModal(prev => ({ ...prev, reason: e.target.value }))}
+                autoFocus
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={cancelReject}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmReject}
+                  className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shadow-lg shadow-red-600/20"
+                >
+                  Confirm Rejection
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1648,7 +1663,7 @@ export default function Admin() {
                                 </button>
                                 <button
                                   className="p-1 sm:p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                                  onClick={() => setLeaveStatus(l.id, "Rejected")}
+                                  onClick={() => handleRejectClick(l.id)}
                                   title="Reject"
                                 >
                                   <XCircleIcon className="h-5 w-5 sm:h-6 sm:w-6" />
