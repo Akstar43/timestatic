@@ -49,6 +49,7 @@ export default function UserDashboard() {
   const [selectedWeek, setSelectedWeek] = useState(getMonday(new Date()));
   const [currentUserData, setCurrentUserData] = useState(null);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -134,6 +135,12 @@ export default function UserDashboard() {
   function getLeaveBalance() {
     if (!currentUserData) return { total: 0, used: 0, remaining: 0 };
 
+    // Convert holidays array to map for O(1) lookup
+    const holidayMap = {};
+    if (Array.isArray(holidays)) {
+      holidays.forEach(h => holidayMap[h.date] = h.name);
+    }
+
     const total = currentUserData.leaveDaysAssigned || 0;
     const used = leaves
       .filter(l => {
@@ -145,7 +152,7 @@ export default function UserDashboard() {
       .reduce((sum, l) => {
         // Handle legacy and new structure
         const isSingle = l.from === l.to;
-        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", currentUserData, holidays);
+        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", currentUserData, holidayMap);
       }, 0);
 
     return { total, used, remaining: total - used };
@@ -215,118 +222,128 @@ export default function UserDashboard() {
   }
 
   async function bookLeave() {
+    if (isSubmitting) return; // Prevent double-click
     if (!currentUserId) return toast.error("User not found, login again.");
     if (!fromDateStr || !toDateStr) return toast.error("Select leave dates");
 
-    const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
-    const isSingleDay = fromDateStr === toDateStr;
+    try {
+      setIsSubmitting(true);
 
-    if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
+      const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
+      const isSingleDay = fromDateStr === toDateStr;
 
-    // Calculate requested duration using business days logic
-    const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isSingleDay, timePeriod, startHalfType, endHalfType, currentUserData, holidays);
+      if (!currentUserData?.id) return toast.error("User profile not found. Please contact admin.");
 
-    if (requestedDays === 0) {
-      return toast.error("Selected dates are non-working days or holidays.");
-    }
-
-    // Get current balance
-    const { total, used } = getLeaveBalance();
-
-    // Calculate pending usage to prevent overbooking
-    const pendingUsage = leaves
-      .filter(l => {
-        const cat = LEAVE_CATEGORIES[l.category];
-        return l.userId === currentUserData.id &&
-          l.status === "Pending" &&
-          l.id !== "temp" && // Exclude optimistic (if any)
-          cat?.type === "Deductable";
-      })
-      .reduce((sum, l) => {
-        const isSingle = l.from === l.to;
-        return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", currentUserData, holidays);
-      }, 0);
-
-    const availableBalance = total - used - pendingUsage;
-
-    // Auto-Rejection Logic
-    let status = "Pending";
-    let adminResponse = "";
-    let isAutoRejected = false;
-
-    if (categoryInfo?.type === "Deductable") {
-      if (total === 0) {
-        status = "Rejected";
-        adminResponse = "System: No leave days allocated.";
-        isAutoRejected = true;
-      } else if (requestedDays > availableBalance) {
-        status = "Rejected";
-        adminResponse = `System: Insufficient balance. Requested ${requestedDays} days, but you only have ${availableBalance} days available (including pending requests).`;
-        isAutoRejected = true;
+      // Convert holidays array to map for O(1) lookup
+      const holidayMap = {};
+      if (Array.isArray(holidays)) {
+        holidays.forEach(h => holidayMap[h.date] = h.name);
       }
+
+      // Calculate requested duration using business days logic
+      const requestedDays = calculateLeaveDuration(fromDateStr, toDateStr, isSingleDay, timePeriod, startHalfType, endHalfType, currentUserData, holidayMap);
+
+      if (requestedDays === 0) {
+        return toast.error("Selected dates are non-working days or holidays.");
+      }
+
+      // Get current balance
+      const { total, used } = getLeaveBalance();
+
+      // Calculate pending usage to prevent overbooking
+      const pendingUsage = leaves
+        .filter(l => {
+          const cat = LEAVE_CATEGORIES[l.category];
+          return l.userId === currentUserData.id &&
+            l.status === "Pending" &&
+            l.id !== "temp" && // Exclude optimistic (if any)
+            cat?.type === "Deductable";
+        })
+        .reduce((sum, l) => {
+          const isSingle = l.from === l.to;
+          return sum + calculateLeaveDuration(l.from, l.to, isSingle, l.halfType || l.timePeriod, l.startHalfType || "Full Day", l.endHalfType || "Full Day", currentUserData, holidayMap);
+        }, 0);
+
+      const availableBalance = total - used - pendingUsage;
+
+      // Auto-Rejection Logic
+      let status = "Pending";
+      let adminResponse = "";
+      let isAutoRejected = false;
+
+      if (categoryInfo?.type === "Deductable") {
+        if (total === 0) {
+          status = "Rejected";
+          adminResponse = "System: No leave days allocated.";
+          isAutoRejected = true;
+        } else if (requestedDays > availableBalance) {
+          status = "Rejected";
+          adminResponse = `System: Insufficient balance. Requested ${requestedDays} days, but you only have ${availableBalance} days available (including pending requests).`;
+          isAutoRejected = true;
+        }
+      }
+
+      const leave = {
+        userId: currentUserData.id, // Standardize on Firestore ID
+        userName: currentUserData.name || "Unknown User",
+        orgId: orgId, // <--- Link to Org
+        from: fromDateStr,
+        to: toDateStr,
+        type: categoryInfo.type,
+        category: leaveCategory,
+        reason,
+        // Store relevant half-day info depending on if it's single or multi
+        isSingleDay,
+        halfType: isSingleDay ? timePeriod : null,
+        startHalfType: !isSingleDay ? startHalfType : null,
+        endHalfType: !isSingleDay ? endHalfType : null,
+        status, // Pending or Rejected
+        adminResponse: isAutoRejected ? adminResponse : null,
+        createdAt: ts()
+      };
+
+      const docRef = await addDoc(collection(db, "leaveRequests"), leave);
+
+      if (isAutoRejected) {
+        toast.error("Leave Request Auto-Rejected: Insufficient Balance");
+      } else {
+        toast.success("Leave request submitted successfully");
+      }
+
+      setFromDateStr(""); setToDateStr(""); setReason("");
+      setLeaveCategory("Holiday");
+      setTimePeriod("Full Day");
+      setIsBookingOpen(false); // Close form
+
+      const leaveWithId = { ...leave, id: docRef.id };
+
+      // Send Email Notification to Admin
+      const adminEmailResult = await sendNewLeaveRequestEmail(leaveWithId, leave.userName);
+      if (!adminEmailResult.success) {
+        console.warn("Failed to send admin email:", adminEmailResult.error);
+      }
+
+      // Send Confirmation/Rejection Email to User
+      const userEmail = currentUserData?.email;
+      if (userEmail) {
+        const userEmailResult = await sendLeaveStatusEmail(userEmail, leave.userName, status, leave, isAutoRejected ? adminResponse : "");
+        if (!userEmailResult.success) {
+          console.warn("Failed to send user confirmation email:", userEmailResult.error);
+        }
+      }
+
+      // Check for Low Balance and Notify User
+      const currentBalance = total - used - pendingUsage - requestedDays;
+      checkAndNotifyLowBalance(currentBalance, currentUserData.id);
+
+      loadLeaves();
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to submit leave request");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const leave = {
-      userId: currentUserData.id, // Standardize on Firestore ID
-      userName: currentUserData.name || "Unknown User",
-      orgId: orgId, // <--- Link to Org
-      from: fromDateStr,
-      to: toDateStr,
-      type: categoryInfo.type,
-      category: leaveCategory,
-      reason,
-      category: leaveCategory,
-      reason,
-      // Store relevant half-day info depending on if it's single or multi
-      isSingleDay,
-      halfType: isSingleDay ? timePeriod : null,
-      startHalfType: !isSingleDay ? startHalfType : null,
-      endHalfType: !isSingleDay ? endHalfType : null,
-      status, // Pending or Rejected
-      adminResponse: isAutoRejected ? adminResponse : null,
-      createdAt: ts()
-    };
-
-    addDoc(collection(db, "leaveRequests"), leave)
-      .then(async (docRef) => {
-        if (isAutoRejected) {
-          toast.error("Leave Request Auto-Rejected: Insufficient Balance");
-        } else {
-          toast.success("Leave request submitted successfully");
-        }
-
-        setFromDateStr(""); setToDateStr(""); setReason("");
-        setLeaveCategory("Holiday");
-        setTimePeriod("Full Day");
-        setIsBookingOpen(false); // Close form
-
-        const leaveWithId = { ...leave, id: docRef.id };
-
-        // Send Email Notification to Admin
-        const adminEmailResult = await sendNewLeaveRequestEmail(leaveWithId, leave.userName);
-        if (!adminEmailResult.success) {
-          console.warn("Failed to send admin email:", adminEmailResult.error);
-        }
-
-        // Send Confirmation/Rejection Email to User
-        const userEmail = currentUserData?.email;
-        if (userEmail) {
-          const userEmailResult = await sendLeaveStatusEmail(userEmail, leave.userName, status, leave, isAutoRejected ? adminResponse : "");
-          if (!userEmailResult.success) {
-            console.warn("Failed to send user confirmation email:", userEmailResult.error);
-          }
-        }
-
-        // Check for Low Balance and Notify User
-        const currentBalance = total - used - pendingUsage - requestedDays;
-        checkAndNotifyLowBalance(currentBalance, currentUserData.id);
-
-        loadLeaves();
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error("Failed to submit leave request");
-      });
   }
 
   const weekDates = getWeekDates(selectedWeek);
@@ -542,10 +559,11 @@ export default function UserDashboard() {
                 onChange={e => setReason(e.target.value)}
               />
               <button
-                className="bg-primary-600 hover:bg-primary-500 text-white px-6 sm:px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20 w-full sm:w-auto"
+                className="bg-primary-600 hover:bg-primary-500 text-white px-6 sm:px-8 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary-600/20 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={bookLeave}
+                disabled={isSubmitting}
               >
-                Submit Request
+                {isSubmitting ? "Submitting..." : "Submit Request"}
               </button>
             </div>
           </div>

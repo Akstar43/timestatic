@@ -16,6 +16,7 @@ export default function JoinOrganization() {
     const [error, setError] = useState("");
 
     const [name, setName] = useState("");
+    const [emailInput, setEmailInput] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -68,7 +69,10 @@ export default function JoinOrganization() {
             const randomPassword = crypto.randomUUID() + crypto.randomUUID();
 
             // 1. Create Auth User
-            const userCredential = await createUserWithEmailAndPassword(auth, validInvite.email, randomPassword);
+            const finalEmail = validInvite.email || emailInput;
+            if (!finalEmail) return toast.error("Email is required");
+
+            const userCredential = await createUserWithEmailAndPassword(auth, finalEmail, randomPassword);
             const user = userCredential.user;
 
             // 2. Update Profile
@@ -78,7 +82,7 @@ export default function JoinOrganization() {
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 name: name,
-                email: validInvite.email,
+                email: finalEmail,
                 role: validInvite.role || 'user',
                 orgId: validInvite.orgId,
                 organizationName: validInvite.orgName,
@@ -159,9 +163,12 @@ export default function JoinOrganization() {
                             <div className="mt-1">
                                 <input
                                     type="email"
-                                    disabled
-                                    value={validInvite.email}
-                                    className="appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                                    required
+                                    disabled={!!validInvite.email} // Disable only if email is pre-filled from invite
+                                    value={validInvite.email || emailInput} // Use invite email or manual input
+                                    onChange={(e) => setEmailInput(e.target.value)}
+                                    className={`appearance-none block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white ${validInvite.email ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 cursor-not-allowed' : ''
+                                        }`}
                                 />
                             </div>
                         </div>

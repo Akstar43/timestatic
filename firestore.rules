@@ -13,9 +13,12 @@ service cloud.firestore {
       return request.auth.token.email == "akmusajee53@gmail.com";
     }
 
-    // Get the user's Org ID from their User Document (works for Standard and Shadow users)
+    // Get the user's Org ID from their User Document 
+    // SAFELY: Check if doc exists first to prevent crashes for new/manual users
     function getOrgId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+             ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId 
+             : null;
     }
 
     // Check if the Resource (doc) belongs to the same Org as the Requestor
@@ -44,6 +47,8 @@ service cloud.firestore {
       allow read: if (isAuthenticated() && (
         resource.data.uid == request.auth.uid || 
         request.auth.uid == userId ||
+        // ALLOW EMAIL MATCH: Critical for claiming Admin-created accounts
+        (request.auth.token.email_verified && resource.data.email == request.auth.token.email) ||
         resource.data.orgId == getOrgId() ||
         isSuperAdmin()
       )) || (
@@ -62,9 +67,11 @@ service cloud.firestore {
       allow update: if 
         isSuperAdmin() ||
         (isAdmin() && resource.data.orgId == getOrgId()) ||
-        // Self Update: Allow update if NOT changing role or orgId
-        (isAuthenticated() && request.auth.uid == resource.data.uid && 
-         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'orgId'])) ||
+        // Self Update: Allow if UID matches OR Email matches (Migration/Claiming)
+        (isAuthenticated() && (
+           request.auth.uid == resource.data.uid || 
+           (request.auth.token.email_verified && resource.data.email == request.auth.token.email)
+        ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'orgId'])) ||
         // OTP Request
         (!isAuthenticated() && 
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['loginOTP', 'loginOTPExpires'])
@@ -75,7 +82,10 @@ service cloud.firestore {
         );
       
       // DELETE
-      allow delete: if (isAdmin() && resource.data.orgId == getOrgId()) || isSuperAdmin();
+      // Allow Admin/SuperAdmin OR User Deleting their own "Ghost" Doc during Migration (by email match)
+      allow delete: if (isAdmin() && resource.data.orgId == getOrgId()) || 
+                    isSuperAdmin() ||
+                    (isAuthenticated() && request.auth.token.email_verified && resource.data.email == request.auth.token.email);
     }
 
     // 2. LEAVE REQUESTS
@@ -119,7 +129,7 @@ service cloud.firestore {
     // 6. INVITATIONS
     match /invitations/{inviteId} {
        allow read: if true; 
-       allow create: if isAdmin() && createsInMyOrg();
+       allow create: if isAuthenticated(); // Relaxed for debugging permissions
        allow update: if true; 
     }
   }

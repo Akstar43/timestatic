@@ -1,8 +1,8 @@
 // src/pages/Login.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
-import { collection, getDocs, query, where, doc, updateDoc, setDoc, serverTimestamp, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, setDoc, serverTimestamp, limit, getDoc, deleteDoc } from "firebase/firestore";
 import { db, googleProvider } from "../firebase/firebase";
 import { signInWithPopup, signInAnonymously, getAuth } from "firebase/auth";
 import { sendOTPEmail } from "../services/emailService";
@@ -20,26 +20,94 @@ export default function Login() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // --- Helper: Ensure User Document ID matches Auth UID ---
+  // This satisfies firestore.rules checks: exists(/databases/$(database)/documents/users/$(request.auth.uid))
+  const ensureUserMigration = async (user) => {
+    try {
+      // 1. Check if the "Correct" doc exists (Doc ID == Auth UID)
+      const correctDocRef = doc(db, "users", user.uid);
+      const correctDocSnap = await getDoc(correctDocRef);
+
+      if (correctDocSnap.exists()) {
+        const data = correctDocSnap.data();
+        // Ensure critical fields are synced (self-healing)
+        if (data.uid !== user.uid || (user.photoURL && data.photoURL !== user.photoURL)) {
+          await updateDoc(correctDocRef, {
+            uid: user.uid,
+            photoURL: user.photoURL || data.photoURL || "",
+            // Don't overwrite name if it's already good, but fallback if missing
+            name: data.name || user.displayName || user.email?.split('@')[0]
+          });
+        }
+        return data;
+      }
+
+      // 2. Not found at correct path? Look for "Old" doc by Email
+      // This handles users created by Admin (random ID) vs Google Auth (UID)
+      const q = query(collection(db, "users"), where("email", "==", user.email.toLowerCase()), limit(1));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        // Found "Old" doc -> MIGRATE
+        const oldDoc = snapshot.docs[0];
+        const oldData = oldDoc.data();
+
+        console.log(`Migrating user ${oldData.email} from ID ${oldDoc.id} to ${user.uid}...`);
+
+        // Create new doc at correct path (Auth UID)
+        await setDoc(correctDocRef, {
+          ...oldData, // Keep all existing roles, orgId, etc.
+          uid: user.uid, // Enforce UID match
+          photoURL: user.photoURL || oldData.photoURL || "",
+          name: oldData.name || user.displayName || user.email?.split('@')[0]
+        });
+
+        // Delete old doc to prevent duplicates
+        await deleteDoc(doc(db, "users", oldDoc.id));
+
+        console.log("Migration complete.");
+        return (await getDoc(correctDocRef)).data();
+      }
+
+      return null; // No existing account found
+    } catch (err) {
+      console.error("Migration check failed:", err);
+      // Fallback: don't block login, but data might be missing
+      return null;
+    }
+  };
+
   // Auto-Redirect if ALREADY logged in (Persistence Fix)
-  React.useEffect(() => {
+  // Now includes Migration Check so "Refreshing" the page fixes the issue
+  useEffect(() => {
     if (currentUser) {
-      // Fetch role to know where to send them
-      const fetchRoleAndRedirect = async () => {
+      const performCheck = async () => {
+        setIsLoading(true); // Show spinner while checking
         try {
-          const q = query(collection(db, "users"), where("uid", "==", currentUser.uid));
-          const snapshot = await getDocs(q);
-          if (!snapshot.empty) {
-            const userData = snapshot.docs[0].data();
+          // 1. Run Migration/Check
+          const userData = await ensureUserMigration(currentUser);
+
+          if (userData) {
+            // 2. Refresh Org Context (since ID might have changed)
+            if (reloadOrganization) await reloadOrganization();
+
+            // 3. Redirect
             const userRole = userData.role || "user";
             navigate(userRole === "admin" ? "/admin" : "/user-dashboard", { replace: true });
+          } else {
+            // If logged in but no FS doc, stay on login (or could show error)
+            // But usually this means "New User" who hasn't clicked "Login with Google" yet
+            // So we just let them stay on the page.
           }
         } catch (e) {
           console.error("Auto-redirect check failed", e);
+        } finally {
+          setIsLoading(false);
         }
       };
-      fetchRoleAndRedirect();
+      performCheck();
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, reloadOrganization]);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -49,14 +117,14 @@ export default function Login() {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
-      // Check if user exists in Firestore by email (not UID)
-      const q = query(collection(db, "users"), where("email", "==", user.email.toLowerCase()));
-      const snapshot = await getDocs(q);
+      // 1. Run Migration/Check Logic
+      let userData = await ensureUserMigration(user);
 
-      if (snapshot.empty) {
+      // 2. Handle New User / Master Admin creation
+      if (!userData) {
         // SPECIAL CASE: Auto-create Master Admin if not exists
         if (user.email === "akmusajee53@gmail.com") {
-          const newDocRef = doc(db, "users", user.uid); // Use Auth UID as doc ID
+          const newDocRef = doc(db, "users", user.uid);
           await setDoc(newDocRef, {
             uid: user.uid,
             name: user.displayName || "Master Admin",
@@ -82,35 +150,9 @@ export default function Login() {
         return;
       }
 
-      // Get the user document
-      // Get the user document
-      const userDoc = snapshot.docs[0];
-      const userData = userDoc.data();
-
-      // Check if Migration is needed (Doc ID != Auth UID)
-      if (userDoc.id !== user.uid) {
-        console.log("Migrating user document to Auth UID...");
-
-        // 1. Create new doc with correct ID
-        await setDoc(doc(db, "users", user.uid), {
-          ...userData,
-          uid: user.uid,
-          photoURL: user.photoURL || userData.photoURL || "",
-          name: userData.name || user.displayName || user.email.split('@')[0]
-        });
-
-        // 2. Delete old doc
-        await import("firebase/firestore").then(({ deleteDoc }) => deleteDoc(doc(db, "users", userDoc.id)));
-
-        console.log("Migration complete.");
-      } else {
-        // Standard Update
-        await updateDoc(doc(db, "users", user.uid), {
-          uid: user.uid,
-          photoURL: user.photoURL || userData.photoURL || "",
-          name: userData.name || user.displayName || user.email.split('@')[0]
-        });
-      }
+      // 3. Success - Redirect
+      // Force Org reload to pick up new permissions
+      if (reloadOrganization) await reloadOrganization();
 
       const userRole = userData.role || "user";
       navigate(userRole === "admin" ? "/admin" : "/user-dashboard");

@@ -19,7 +19,9 @@ import {
   Bars3Icon,
   XMarkIcon,
   GlobeAmericasIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  ClipboardDocumentCheckIcon,
+  CreditCardIcon
 } from "@heroicons/react/24/outline";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
@@ -40,7 +42,8 @@ export default function Admin() {
   const [users, setUsers] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [selectedUser, setSelectedUser] = useState("");
-  const [selectedOrg, setSelectedOrg] = useState("");
+
+  const [filterOrgId, setFilterOrgId] = useState("ALL");
 
   // Create User
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -147,8 +150,7 @@ export default function Admin() {
   // SUPER ADMIN CHECK
   const isSuperAdmin = auth.currentUser?.email === "akmusajee53@gmail.com";
 
-  // Super Admin Filter State
-  const [filterOrgId, setFilterOrgId] = useState("ALL");
+
 
   // ----- Load data -----
   useEffect(() => {
@@ -305,15 +307,33 @@ export default function Admin() {
   }
 
   async function clearLeaveRequests() {
-    if (!window.confirm("Are you sure you want to delete all leave requests?")) return;
+    if (!window.confirm("Are you sure you want to delete all visible leave requests?")) return;
     try {
-      const snapshot = await getDocs(collection(db, "leaveRequests"));
-      const batch = snapshot.docs.map(docItem => deleteDoc(doc(db, "leaveRequests", docItem.id)));
-      await Promise.all(batch);
-      toast.success("All leave requests cleared");
+      let q;
+      // Use exact same logic as loadLeaves to ensure we only delete what is legally viewable/deletable
+      if (isSuperAdmin) {
+        if (filterOrgId !== "ALL") {
+          q = query(collection(db, "leaveRequests"), where("orgId", "==", filterOrgId));
+        } else {
+          q = collection(db, "leaveRequests");
+        }
+      } else {
+        q = query(collection(db, "leaveRequests"), where("orgId", "==", orgId));
+      }
+
+      const snapshot = await getDocs(q);
+
+      // Batch deletion for better performance/atomicity (though standard batch is limited to 500)
+      // For simplicity in this helper we loop promises, but for production batch is better.
+      // Keeping existing Promise.all pattern but on the FILTERED snapshot.
+      const deletionPromises = snapshot.docs.map(docItem => deleteDoc(doc(db, "leaveRequests", docItem.id)));
+      await Promise.all(deletionPromises);
+
+      toast.success("Requests cleared successfully");
       loadLeaves();
     } catch (error) {
-      toast.error("Error clearing leave requests: " + error.message);
+      console.error("Clear leaves error:", error);
+      toast.error("Error clearing requests: " + error.message);
     }
   }
 
@@ -353,6 +373,21 @@ export default function Admin() {
       const existingUser = users.find(u => u.email.toLowerCase() === newUserEmail.toLowerCase());
       if (existingUser) {
         return toast.error("This email is already registered");
+      }
+
+      // Check subscription limits
+      const targetOrg = isSuperAdmin && filterOrgId !== "ALL"
+        ? orgs.find(o => o.id === filterOrgId)
+        : org;
+
+      const currentPlan = targetOrg?.subscriptionPlan || 'free';
+      const maxUsers = targetOrg?.maxUsers || 5; // Default to free tier limit
+
+      // Count users in target org
+      const orgUserCount = users.filter(u => u.orgId === targetOrgId).length;
+
+      if (currentPlan !== 'enterprise' && orgUserCount >= maxUsers) {
+        return toast.error(`User limit reached (${maxUsers} users). Upgrade your plan to add more users.`);
       }
 
       // Create user document in Firestore
@@ -430,29 +465,19 @@ export default function Admin() {
       toast.error("Failed to create org");
     }
   }
-
-  async function assignUserToOrg() {
-    if (!selectedUser || !selectedOrg) return toast.error("Select user & org");
-    try {
-      await updateDoc(doc(db, "users", selectedUser), { organizationName: selectedOrg });
-      setUsers(prev => prev.map(u => u.id === selectedUser ? { ...u, organizationName: selectedOrg } : u));
-      toast.success("User assigned to org");
-    } catch {
-      toast.error("Failed to assign user");
-    }
-  }
-
   // ----- Invitation System -----
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteMode, setInviteMode] = useState("email"); // "email" or "link"
   const [isInviting, setIsInviting] = useState(false);
   const [inviteLinkSuccess, setInviteLinkSuccess] = useState("");
 
   async function handleInviteUser() {
-    if (!inviteEmail) return toast.error("Please enter an email");
+    // Validation only if in Email mode
+    if (inviteMode === "email" && !inviteEmail) return toast.error("Please enter an email");
 
     // Check if user already exists in this org (optional, but good UX)
-    if (users.some(u => u.email.toLowerCase() === inviteEmail.toLowerCase())) {
+    if (inviteMode === "email" && users.some(u => u.email.toLowerCase() === inviteEmail.toLowerCase())) {
       return toast.error("User with this email already exists in this organization.");
     }
 
@@ -471,27 +496,47 @@ export default function Admin() {
         targetOrgName = selectedOrgObj?.name || "Organization";
       }
 
+      // Check subscription limits before inviting
+      const targetOrg = isSuperAdmin && filterOrgId !== "ALL"
+        ? orgs.find(o => o.id === filterOrgId)
+        : org;
+
+      const currentPlan = targetOrg?.subscriptionPlan || 'free';
+      const maxUsers = targetOrg?.maxUsers || 5;
+      const orgUserCount = users.filter(u => u.orgId === targetOrgId).length;
+
+      if (currentPlan !== 'enterprise' && orgUserCount >= maxUsers) {
+        setIsInviting(false);
+        return toast.error(`User limit reached (${maxUsers} users). Upgrade your plan to invite more users.`);
+      }
+
       // 1. Create Invitation Doc
       await addDoc(collection(db, "invitations"), {
-        email: inviteEmail.toLowerCase(),
+        email: inviteMode === "email" ? inviteEmail.toLowerCase() : null, // Null email for direct link
         orgId: targetOrgId,
         orgName: targetOrgName,
         token: token,
         status: 'pending',
         createdAt: ts(),
-        role: 'user' // Default to user for now
+        role: 'user', // Default to user for now
+        mode: inviteMode
       });
 
-      // 2. Send Email
-      const result = await sendInvitationEmail(inviteEmail, inviteLink, targetOrgName || "our company");
-
-      if (result.success) {
-        toast.success(`Invitation created for ${inviteEmail}`);
-        setInviteLinkSuccess(inviteLink); // Show success UI
+      // 2. Handle Mode
+      if (inviteMode === "email") {
+        const result = await sendInvitationEmail(inviteEmail, inviteLink, targetOrgName || "our company");
+        if (result.success) {
+          toast.success(`Invitation created for ${inviteEmail}`);
+          setInviteLinkSuccess(inviteLink);
+        } else {
+          toast.error("Failed to send email, but invite link created.");
+          setInviteLinkSuccess(inviteLink);
+          console.error(result.error);
+        }
       } else {
-        toast.error("Failed to send email, but invite link created.");
-        setInviteLinkSuccess(inviteLink); // Still show link
-        console.error(result.error);
+        // Link Mode
+        setInviteLinkSuccess(inviteLink);
+        toast.success("Invitation link generated!");
       }
 
     } catch (error) {
@@ -533,39 +578,53 @@ export default function Admin() {
   }
 
   // ----- Book Leave -----
+  // ----- Book Leave -----
   async function bookLeave() {
-    if (!selectedUser || !from || !to) return toast.error("Select all fields");
+    if (!selectedUser) return toast.error("Select a user");
+    if (!from || !to) return toast.error("Select dates");
 
-    const selectedUserObj = users.find(u => u.id === selectedUser);
-    if (!selectedUserObj) return toast.error("Selected user not found");
+    // Convert holidays array to map for O(1) lookup
+    const holidayMap = {};
+    if (Array.isArray(holidays)) {
+      holidays.forEach(h => holidayMap[h.date] = h.name);
+    }
 
-    const userEmail = selectedUserObj.email || selectedUserObj.userEmail || selectedUserObj.googleId;
-    console.log(userEmail);
-    const userName = selectedUserObj.name || "User";
+    // Find target user object for working days config
+    const targetUser = users.find(u => u.id === selectedUser);
+    if (!targetUser) return toast.error("User not found");
+
+    // Determine Org ID
+    let targetOrgId = orgId;
+    if (isSuperAdmin && filterOrgId !== "ALL") {
+      targetOrgId = filterOrgId;
+    } else if (targetUser.orgId) {
+      targetOrgId = targetUser.orgId;
+    }
+
+    const isSingleDay = from === to;
+    const requestedDays = calculateLeaveDuration(from, to, isSingleDay, timePeriod, startHalfType, endHalfType, targetUser, holidayMap);
+
+    // Check balance
+    const remaining = getRemainingLeaves(selectedUser);
+    const categoryInfo = LEAVE_CATEGORIES[leaveCategory];
+
+    if (categoryInfo?.type === "Deductable" && requestedDays > remaining) {
+      if (!window.confirm(`User has only ${remaining} days left, but this request is for ${requestedDays} days. Continue anyway?`)) {
+        return;
+      }
+    }
 
     try {
-      const isSingleDay = from === to;
-
-      // Determine Org ID
-      let targetOrgId = orgId;
-      if (isSuperAdmin && filterOrgId !== "ALL") {
-        targetOrgId = filterOrgId;
-      }
-      // Or safer: rely on user's orgId since we found selectedUser
-      if (selectedUserObj.orgId) {
-        targetOrgId = selectedUserObj.orgId;
-      }
-
-      const leave = {
+      const leaveData = {
         userId: selectedUser,
-        userName,
-        orgId: targetOrgId, // <--- Link to Org
+        userName: targetUser.name || "Unknown",
+        orgId: targetOrgId,
         from,
         to,
-        type: leaveType,
+        type: categoryInfo.type,
         category: leaveCategory,
         reason,
-        status: "Pending",
+        status: "Approved", // Admin booking is auto-approved
         isSingleDay,
         halfType: isSingleDay ? timePeriod : null,
         startHalfType: !isSingleDay ? startHalfType : null,
@@ -573,51 +632,29 @@ export default function Admin() {
         createdAt: ts()
       };
 
-      // Save leave to Firestore
-      const docRef = await addDoc(collection(db, "leaveRequests"), leave);
+      const docRef = await addDoc(collection(db, "leaveRequests"), leaveData);
 
-      // Update local state
-      setLeaveRequests(prev => [...prev, { ...leave, id: docRef.id }]);
-
-      // Add notification
+      // Add notification for the record
       await addDoc(collection(db, "notifications"), {
         type: "leave_request",
-        message: `Leave requested for ${userName}`,
+        message: `Leave booked by admin for ${targetUser.name}`,
         read: false,
         createdAt: ts(),
-        orgId: targetOrgId, // <--- Link to Org
-        meta: { userId: selectedUser }
+        orgId: targetOrgId,
+        meta: { userId: selectedUser, leaveId: docRef.id }
       });
 
-      // Send email only if user has a valid email
-      if (userEmail) {
-        const emailResult = await sendLeaveStatusEmail(userEmail, userName, "Pending", leave);
-        if (!emailResult.success) {
-          console.warn("Email failed to send", emailResult.error);
-        }
-      } else {
-        console.warn("No email for selected user, skipping email notification");
-      }
-
-      // Reset form
+      toast.success("Leave booked successfully");
+      loadLeaves();
+      setReason("");
       setFrom("");
       setTo("");
-      setReason("");
-      setLeaveType("Deductable");
-      setLeaveCategory("Holiday");
-      setTimePeriod("Full Day");
-
-      toast.success("Leave booked successfully");
-
-    } catch (err) {
-      console.error("Failed to book leave:", err);
+    } catch (e) {
+      console.error(e);
       toast.error("Failed to book leave");
     }
-    const getCategoryColor = (category) => {
-      return LEAVE_CATEGORIES[category]?.color || 'bg-slate-500';
-    };
-
   }
+
 
 
 
@@ -910,87 +947,122 @@ export default function Admin() {
         </div>
       )}
 
-      {/* Invite User Modal */}
+      {/* Invite Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-dark-card rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-200 dark:border-white/10 animate-fade-in-up">
-            <h3 className="text-xl font-heading font-bold mb-2">
-              {inviteLinkSuccess ? "Invitation Sent!" : "Invite Team Member"}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-white/5 w-full max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 animate-fade-in relative transition-colors duration-200">
+            <button
+              onClick={() => { setShowInviteModal(false); setInviteEmail(""); setInviteLinkSuccess(""); setInviteMode("email"); }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+
+            <h2 className="text-xl sm:text-2xl font-heading font-bold mb-2 text-slate-900 dark:text-white">Invite User</h2>
 
             {!inviteLinkSuccess ? (
               <>
-                <p className="text-slate-600 dark:text-slate-300 mb-6 text-sm">
-                  Send an email invitation. Attempts to join will be linked to <strong>{org?.name}</strong>.
+                <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
+                  Send an invitation to join {org?.name || "your organization"}.
                 </p>
 
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white"
-                    placeholder="colleague@example.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                  />
+                {/* Mode Toggles */}
+                <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-lg mb-6">
+                  <button
+                    onClick={() => setInviteMode("email")}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${inviteMode === "email"
+                      ? "bg-white dark:bg-dark-bg shadow text-slate-900 dark:text-white"
+                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                      }`}
+                  >
+                    Send Email
+                  </button>
+                  <button
+                    onClick={() => setInviteMode("link")}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${inviteMode === "link"
+                      ? "bg-white dark:bg-dark-bg shadow text-slate-900 dark:text-white"
+                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                      }`}
+                  >
+                    Generate Link
+                  </button>
                 </div>
 
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={() => { setShowInviteModal(false); setInviteEmail(""); }}
-                    className="px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
-                    disabled={isInviting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleInviteUser}
-                    disabled={isInviting}
-                    className="px-4 py-2 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isInviting ? (
-                      <>
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                        Sending...
-                      </>
-                    ) : (
-                      "Send Invite"
-                    )}
-                  </button>
-                </div>
+                {inviteMode === "email" && (
+                  <div className="mb-6">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                      Email Address
+                    </label>
+                    <input
+                      className="w-full bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-slate-900 dark:text-white"
+                      placeholder="colleague@company.com"
+                      value={inviteEmail}
+                      onChange={e => setInviteEmail(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {inviteMode === "link" && (
+                  <div className="mb-6 bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-900/20">
+                    <p className="text-sm text-blue-800 dark:text-blue-200 flex gap-2">
+                      <span>ℹ️</span>
+                      <span>Generates a unique link. You can share it via WhatsApp or any chat app. The user will enter their email when they join.</span>
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  className="w-full bg-primary-600 hover:bg-primary-500 text-white py-3 rounded-xl font-bold text-lg shadow-lg shadow-primary-600/30 transition-all transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed"
+                  onClick={handleInviteUser}
+                  disabled={isInviting}
+                >
+                  {isInviting ? "Creating..." : inviteMode === "email" ? "Send Invitation" : "Generate Link"}
+                </button>
               </>
             ) : (
               <>
-                <p className="text-emerald-600 dark:text-emerald-400 mb-4 text-sm font-medium">
-                  User has been emailed! You can also share this link directly:
-                </p>
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce-slow">
+                    <CheckCircleIcon className="h-8 w-8" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+                    {inviteMode === "email" ? "Invitation Sent!" : "Link Generated!"}
+                  </h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">
+                    {inviteMode === "email"
+                      ? `An email has been sent to ${inviteEmail}`
+                      : "Share this link with your team member"}
+                  </p>
+                </div>
 
-                <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg mb-4 break-all text-xs font-mono border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300">
-                  {inviteLinkSuccess}
+                <div className="bg-slate-50 dark:bg-dark-bg border border-slate-200 dark:border-white/10 rounded-lg p-3 flex items-center gap-2 mb-4">
+                  <span className="text-xs text-slate-400 font-mono flex-1 truncate">{inviteLinkSuccess}</span>
+                  <button
+                    onClick={() => copyToClipboard(inviteLinkSuccess)}
+                    className="p-2 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                    title="Copy Link"
+                  >
+                    <ClipboardDocumentCheckIcon className="h-5 w-5" />
+                  </button>
                 </div>
 
                 <div className="space-y-3">
-                  <button
-                    onClick={() => copyToClipboard(inviteLinkSuccess)}
-                    className="w-full flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white py-2.5 rounded-lg font-medium transition-colors"
-                  >
-                    <span className="h-5 w-5">📋</span> Copy Link
-                  </button>
-
                   <a
                     href={`https://wa.me/?text=${encodeURIComponent(`Join ${org?.name || 'our team'} on TimeAway here: ${inviteLinkSuccess}`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#128C7E] text-white py-2.5 rounded-lg font-medium transition-colors shadow-lg"
                   >
-                    <span className="h-5 w-5">💬</span> Share on WhatsApp
+                    <span className="h-5 w-5 fill-current">
+                      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.592 2.654-.698c1.005.549 1.998.835 3.018.835 3.123 0 5.76-2.587 5.76-5.766.001-3.181-2.58-5.766-5.76-5.766zm9 5.766c0 4.962-4.033 9-9 9-1.524 0-3.039-.379-4.386-1.095l-4.706 1.238 1.256-4.577c-.902-1.558-1.387-3.32-1.387-5.127 0-4.961 4.032-9 9-9 4.962 0 9 4.039 9 9zm-3.847 2.379c-.11-.269-.652-.647-1.157-.962-.871-.545-1.129-.46-1.516.155-.308.487-.533.722-.962.593-.453-.135-1.638-.609-2.766-1.615-.873-.777-1.258-1.552-1.428-1.954-.15-.353-.027-.589.172-.816.141-.161.272-.259.43-.458.125-.156.168-.266.252-.44.084-.176.042-.329-.021-.458-.063-.129-.569-1.369-.768-1.875-.205-.519-.408-.436-.615-.436H6.55c-.235 0-.616.084-.94.437-.323.352-1.232 1.204-1.232 2.937 0 1.734 1.273 3.409 1.45 3.644.176.235 2.504 3.824 6.066 5.361.848.366 1.509.585 2.03.75.87.275 1.662.236 2.29.143.703-.104 1.734-.708 1.979-1.391.245-.683.245-1.269.172-1.391z" /></svg>
+                    </span>
+                    Share on WhatsApp
                   </a>
 
                   <button
-                    onClick={() => { setShowInviteModal(false); setInviteEmail(""); setInviteLinkSuccess(""); }}
-                    className="w-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm mt-2"
+                    onClick={() => { setShowInviteModal(false); setInviteEmail(""); setInviteLinkSuccess(""); setInviteMode("email"); }}
+                    className="w-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm"
                   >
                     Done
                   </button>
@@ -1068,6 +1140,7 @@ export default function Admin() {
           <SidebarItem id="holidays" icon={GlobeAmericasIcon} label="Public Holidays" />
           <SidebarItem id="yearEndReset" icon={CalendarDaysIcon} label="Year-End Reset" />
           <SidebarItem id="notificationsTab" icon={BellIcon} label="Notifications" />
+          <SidebarItem id="billing" icon={CreditCardIcon} label="Billing & Plans" />
           {isSuperAdmin && (
             <SidebarItem id="logs" icon={ClipboardDocumentListIcon} label="System Logs" />
           )}
@@ -1169,39 +1242,7 @@ export default function Admin() {
                         </button>
                       </div>
 
-                      <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Move User to Organization
-                        </h3>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                          <select
-                            className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
-                            value={selectedUser}
-                            onChange={e => setSelectedUser(e.target.value)}
-                          >
-                            <option value="">Select User</option>
-                            {users.map(u => (
-                              <option key={u.id} value={u.id}>{u.name} ({u.organizationName || "No Org"})</option>
-                            ))}
-                          </select>
-                          <select
-                            className="flex-1 bg-slate-50 dark:bg-dark-bg border border-slate-300 dark:border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-secondary-500 transition-all text-slate-900 dark:text-white"
-                            value={selectedOrg}
-                            onChange={e => setSelectedOrg(e.target.value)}
-                          >
-                            <option value="">Select Organization</option>
-                            {orgs.map(o => (
-                              <option key={o.id} value={o.name}>{o.name}</option>
-                            ))}
-                          </select>
-                          <button
-                            className="bg-secondary-600 hover:bg-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-secondary-600/20 w-full sm:w-auto"
-                            onClick={assignUserToOrg}
-                          >
-                            Move
-                          </button>
-                        </div>
-                      </div>
+
                     </div>
                   </div>
                 )}
@@ -1814,6 +1855,146 @@ export default function Admin() {
               </ul>
             </div>
           )}
+
+          {/* Billing Tab */}
+          {tab === "billing" && (
+            <div className="space-y-6">
+              {/* Current Plan Card */}
+              <div className="bg-gradient-to-r from-primary-500 to-secondary-500 p-6 rounded-2xl shadow-xl text-white">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-sm font-medium opacity-90">Current Plan</h3>
+                    <h2 className="text-3xl font-bold mt-1 capitalize">{org?.subscriptionPlan || 'Free'}</h2>
+                    <p className="mt-2 opacity-90">
+                      {users.filter(u => u.orgId === orgId).length} / {org?.maxUsers || 5} users
+                    </p>
+                  </div>
+                  <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg">
+                    <p className="text-sm font-medium">{org?.subscriptionStatus === 'active' ? '✓ Active' : 'Free Tier'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pricing Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Free Plan */}
+                <div className="bg-white dark:bg-dark-card border-2 border-slate-200 dark:border-white/10 p-6 rounded-2xl shadow-lg transition-all hover:shadow-xl">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Free</h3>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-slate-900 dark:text-white">$0</span>
+                    <span className="text-slate-500 dark:text-slate-400">/month</span>
+                  </div>
+                  <ul className="mt-6 space-y-3">
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Up to 5 users</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Basic leave management</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Email notifications</span>
+                    </li>
+                  </ul>
+                  <button
+                    disabled
+                    className="w-full mt-6 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 py-2.5 rounded-lg font-medium cursor-not-allowed"
+                  >
+                    Current Plan
+                  </button>
+                </div>
+
+                {/* Pro Plan */}
+                <div className="bg-white dark:bg-dark-card border-2 border-primary-500 p-6 rounded-2xl shadow-xl transition-all hover:shadow-2xl relative">
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-primary-500 text-white px-4 py-1 rounded-full text-xs font-bold">
+                    POPULAR
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Pro</h3>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-slate-900 dark:text-white">$29</span>
+                    <span className="text-slate-500 dark:text-slate-400">/month</span>
+                  </div>
+                  <ul className="mt-6 space-y-3">
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Up to 25 users</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Custom leave types</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Year-end rollover</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Priority support</span>
+                    </li>
+                  </ul>
+                  <button
+                    onClick={() => toast.info('Stripe integration coming soon! Set up your API keys first.')}
+                    className="w-full mt-6 bg-primary-600 hover:bg-primary-500 text-white py-2.5 rounded-lg font-medium shadow-lg shadow-primary-600/20 transition-all"
+                  >
+                    Upgrade to Pro
+                  </button>
+                </div>
+
+                {/* Business Plan */}
+                <div className="bg-white dark:bg-dark-card border-2 border-slate-200 dark:border-white/10 p-6 rounded-2xl shadow-lg transition-all hover:shadow-xl">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Business</h3>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-slate-900 dark:text-white">$99</span>
+                    <span className="text-slate-500 dark:text-slate-400">/month</span>
+                  </div>
+                  <ul className="mt-6 space-y-3">
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Up to 100 users</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Everything in Pro</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Advanced analytics</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-slate-600 dark:text-slate-300">Dedicated support</span>
+                    </li>
+                  </ul>
+                  <button
+                    onClick={() => toast.info('Contact us for Business plan setup')}
+                    className="w-full mt-6 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium transition-all"
+                  >
+                    Upgrade to Business
+                  </button>
+                </div>
+              </div>
+
+              {/* Setup Instructions */}
+              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-6">
+                <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-2">
+                  <BellIcon className="h-5 w-5" />
+                  Setup Required
+                </h3>
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-3">
+                  To enable payments, you need to configure Stripe. Follow these steps:
+                </p>
+                <ol className="text-xs text-amber-800 dark:text-amber-300 space-y-1 list-decimal list-inside">
+                  <li>Create a Stripe account at <a href="https://stripe.com" target="_blank" rel="noopener noreferrer" className="underline">stripe.com</a></li>
+                  <li>Get your API keys from the Stripe Dashboard</li>
+                  <li>Add environment variables to Vercel (STRIPE_SECRET_KEY, etc.)</li>
+                  <li>Deploy the updated API endpoints</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
           {/* System Logs Tab (Super Admin Only) */}
           {tab === "logs" && isSuperAdmin && (
             <div className="space-y-6">
@@ -1867,3 +2048,4 @@ export default function Admin() {
     </div>
   );
 }
+
